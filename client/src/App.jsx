@@ -2,7 +2,7 @@ import React from "react";
 import { Routes, Route } from "react-router-dom";
 
 import Home from "./views/home/home";
-import Products from "./views/Product/Product";
+import Products from "./views/Products/Products";
 import ProductDetails from "./views/ProductDetails/ProductDetails";
 import Login from "./views/login/login";
 import Register from "./views/Register/Register";

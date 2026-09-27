@@ -1,1043 +1,2161 @@
-import express from 'express';
-import cors from 'cors';
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
+import express from "express";
+import cors from "cors";
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 
-import User from './models/user.js';
-import Product from './models/product.js';
-import Category from './models/category.js';
-import Review from './models/review.js';
-import Order from './models/order.js';
-import Cart from './models/cart.js';
-import Wishlist from './models/wishlist.js';
+import User from "./models/user.js";
+import Product from "./models/products.js";
+import Category from "./models/category.js";
+import Review from "./models/review.js";
+import Order from "./models/order.js";
+import Cart from "./models/cart.js";
+import Wishlist from "./models/wishlist.js";
 
 dotenv.config();
 
 const app = express();
 
-app.use(express.json());
-app.use(cors());
+/* =========================================================
+   MIDDLEWARE
+========================================================= */
 
-const JWT_SECRET = process.env.JWT_SECRET || 'shopsphere_super_secret_jwt_key_2026';
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:3000",
+    ],
+    credentials: true,
+  })
+);
 
-// Helper: Generate JWT Token
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+const PORT = process.env.PORT || 8080;
+
+const JWT_SECRET =
+  process.env.JWT_SECRET ||
+  "shopsphere_super_secret_jwt_key_2026";
+
+/* =========================================================
+   JWT TOKEN
+========================================================= */
+
 const generateToken = (userId, role) => {
-  return jwt.sign({ id: userId, role }, JWT_SECRET, { expiresIn: '30d' });
-};
-
-// Middleware: Authentication
-const protect = async (req, res, next) => {
-  let token;
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    try {
-      token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, JWT_SECRET);
-      req.user = await User.findById(decoded.id).select('-password');
-      if (!req.user) {
-        return res.status(401).json({ success: false, message: 'User not found' });
-      }
-      return next();
-    } catch (error) {
-      return res.status(401).json({ success: false, message: 'Not authorized, token failed' });
+  return jwt.sign(
+    {
+      id: userId,
+      role: role,
+    },
+    JWT_SECRET,
+    {
+      expiresIn: "30d",
     }
-  }
-
-  return res.status(401).json({ success: false, message: 'Not authorized, no token' });
+  );
 };
 
-// Middleware: Admin Only
+/* =========================================================
+   AUTH MIDDLEWARE
+========================================================= */
+
+const protect = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (
+      !authHeader ||
+      !authHeader.startsWith("Bearer ")
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: "Not authorized, no token",
+      });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    const decoded = jwt.verify(
+      token,
+      JWT_SECRET
+    );
+
+    const user = await User.findById(
+      decoded.id
+    ).select("-password");
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    req.user = user;
+
+    next();
+  } catch (error) {
+    console.error(
+      "AUTH ERROR:",
+      error.message
+    );
+
+    return res.status(401).json({
+      success: false,
+      message: "Not authorized, token failed",
+    });
+  }
+};
+
+/* =========================================================
+   ADMIN MIDDLEWARE
+========================================================= */
+
 const adminOnly = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
+  if (
+    req.user &&
+    req.user.role === "admin"
+  ) {
     return next();
   }
-  return res.status(403).json({ success: false, message: 'Access denied: Admin role required' });
+
+  return res.status(403).json({
+    success: false,
+    message: "Admin access required",
+  });
 };
 
-// Seed Function
-const seedInitialData = async () => {
-  try {
+/* =========================================================
+   DATABASE
+========================================================= */
 
-    const adminUser = await User.findOne({ email: 'admin@shopsphere.com' });
-    if (!adminUser) {
-      const hashedPassword = await bcrypt.hash('admin123', 10);
-      await User.create({
-        name: 'ShopSphere Admin',
-        email: 'admin@shopsphere.com',
-        password: hashedPassword,
-        role: 'admin',
-        phone: '+91 9876543210',
-        address: 'ShopSphere Headquarters, Nashik, India',
-      });
-      console.log('Created default admin account (admin@shopsphere.com / admin123)');
-    }
-
-    const demoUser = await User.findOne({ email: 'user@shopsphere.com' });
-    if (!demoUser) {
-      const hashedUserPass = await bcrypt.hash('123456', 10);
-      await User.create({
-        name: 'Demo User',
-        email: 'user@shopsphere.com',
-        password: hashedUserPass,
-        role: 'user',
-        phone: '+91 9876543211',
-        address: '123 College Road, Nashik, India',
-      });
-      console.log('Created default user account (user@shopsphere.com / 123456)');
-    }
-  } catch (err) {
-    console.warn('Seed check error:', err.message);
-  }
-};
-
-// Database Connection
 const connectDB = async () => {
   try {
     if (!process.env.MONGO_URI) {
-      console.warn('MONGO_URI is not set in .env');
+      console.log(
+        "MONGO_URI is missing in .env"
+      );
       return;
     }
-    const conn = await mongoose.connect(process.env.MONGO_URI);
-    if (conn) {
-      console.log('MongoDB connected successfully');
-      await seedInitialData();
-    }
+
+    await mongoose.connect(
+      process.env.MONGO_URI
+    );
+
+    console.log(
+      "MongoDB connected successfully"
+    );
+
+    await createDefaultUsers();
   } catch (error) {
-    console.error('MongoDB connection error:', error.message);
+    console.error(
+      "MongoDB connection error:",
+      error.message
+    );
   }
 };
 
-/* ==========================================================================
-   USER ROUTES
-   ========================================================================== */
+/* =========================================================
+   DEFAULT USERS
+========================================================= */
 
-// POST /api/users/register
-app.post('/api/users/register', async (req, res) => {
+const createDefaultUsers = async () => {
   try {
-    const { name, email, password, phone, address } = req.body;
-    if (!name || !email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide name, email, and password' });
-    }
-
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
-    if (existingUser) {
-      return res.status(400).json({ success: false, message: 'User already exists with this email' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await User.create({
-      name,
-      email: email.toLowerCase(),
-      password: hashedPassword,
-      phone: phone || '',
-      address: address || '',
-      role: 'user',
+    let admin = await User.findOne({
+      email: "admin@shopsphere.com",
     });
 
-    const token = generateToken(user._id, user.role);
-
-    return res.status(201).json({
-      success: true,
-      token,
-      user: {
-        _id: user._id,
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        address: user.address,
-        role: user.role,
-      },
-    });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// POST /api/users/login
-app.post('/api/users/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide email and password' });
-    }
-
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) {
-      return res.status(400).json({ success: false, message: 'Invalid email or password' });
-    }
-
-    if (!user.isActive) {
-      return res.status(403).json({ success: false, message: 'This account has been deactivated' });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ success: false, message: 'Invalid email or password' });
-    }
-
-    const token = generateToken(user._id, user.role);
-
-    return res.status(200).json({
-      success: true,
-      token,
-      user: {
-        _id: user._id,
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        address: user.address,
-        role: user.role,
-      },
-    });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// GET /api/users/profile
-app.get('/api/users/profile', protect, async (req, res) => {
-  return res.status(200).json({
-    success: true,
-    user: {
-      _id: req.user._id,
-      id: req.user._id,
-      name: req.user.name,
-      email: req.user.email,
-      phone: req.user.phone,
-      address: req.user.address,
-      role: req.user.role,
-      isActive: req.user.isActive,
-    },
-  });
-});
-
-// PUT /api/users/profile
-app.put('/api/users/profile', protect, async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    user.name = req.body.name || user.name;
-    user.phone = req.body.phone !== undefined ? req.body.phone : user.phone;
-    user.address = req.body.address !== undefined ? req.body.address : user.address;
-
-    if (req.body.password) {
-      user.password = await bcrypt.hash(req.body.password, 10);
-    }
-
-    const updatedUser = await user.save();
-
-    return res.status(200).json({
-      success: true,
-      user: {
-        _id: updatedUser._id,
-        id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        phone: updatedUser.phone,
-        address: updatedUser.address,
-        role: updatedUser.role,
-      },
-    });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-/* ==========================================================================
-   PRODUCT ROUTES
-   ========================================================================== */
-
-// GET /api/products (and alias /api/product)
-app.get(['/api/products', '/api/product'], async (req, res) => {
-  try {
-    const { category, search, minPrice, maxPrice, sort } = req.query;
-    let query = {};
-
-    if (category && category !== 'All') {
-      query.category = { $regex: new RegExp(category, 'i') };
-    }
-
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { brand: { $regex: search, $options: 'i' } },
-        { category: { $regex: search, $options: 'i' } },
-      ];
-    }
-
-    if (minPrice || maxPrice) {
-      query.price = {};
-      if (minPrice) query.price.$gte = Number(minPrice);
-      if (maxPrice) query.price.$lte = Number(maxPrice);
-    }
-
-    let sortOption = { createdAt: -1 };
-    if (sort === 'price-low') sortOption = { price: 1 };
-    if (sort === 'price-high') sortOption = { price: -1 };
-    if (sort === 'rating') sortOption = { rating: -1 };
-    if (sort === 'newest') sortOption = { createdAt: -1 };
-
-    let products = await Product.find(query).sort(sortOption);
-    if (!products || products.length === 0) {
-      try {
-        const rawProducts = await mongoose.connection.db.collection('product').find(query).sort(sortOption).toArray();
-        if (rawProducts && rawProducts.length > 0) {
-          products = rawProducts;
-        }
-      } catch {
-        // fallback
-      }
-    }
-
-    return res.status(200).json(products);
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// GET /api/products/:id
-app.get('/api/products/:id', async (req, res) => {
-  try {
-    let product;
-    try {
-      product = await Product.findById(req.params.id);
-    } catch {
-      // ignore
-    }
-
-    if (!product) {
-      try {
-        const { ObjectId } = mongoose.Types;
-        const objId = ObjectId.isValid(req.params.id) ? new ObjectId(req.params.id) : req.params.id;
-        product = await mongoose.connection.db.collection('product').findOne({
-          $or: [{ _id: objId }, { _id: req.params.id }, { id: req.params.id }]
-        });
-      } catch {
-        // ignore
-      }
-    }
-
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
-    return res.status(200).json({ success: true, product });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// POST /api/products
-app.post('/api/products', protect, adminOnly, async (req, res) => {
-  try {
-    const product = await Product.create(req.body);
-    return res.status(201).json({ success: true, product });
-  } catch (error) {
-    return res.status(400).json({ success: false, message: error.message });
-  }
-});
-
-// PUT /api/products/:id
-app.put('/api/products/:id', protect, adminOnly, async (req, res) => {
-  try {
-    const product = await Product.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
-    return res.status(200).json({ success: true, product });
-  } catch (error) {
-    return res.status(400).json({ success: false, message: error.message });
-  }
-});
-
-// DELETE /api/products/:id
-app.delete('/api/products/:id', protect, adminOnly, async (req, res) => {
-  try {
-    const product = await Product.findByIdAndDelete(req.params.id);
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
-    return res.status(200).json({ success: true, message: 'Product deleted' });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-/* ==========================================================================
-   REVIEW ROUTES (PERSISTED IN MONGODB)
-   ========================================================================== */
-
-// GET /api/products/:id/reviews
-app.get('/api/products/:id/reviews', async (req, res) => {
-  try {
-    const { ObjectId } = mongoose.Types;
-    const prodIdObj = ObjectId.isValid(req.params.id) ? new ObjectId(req.params.id) : null;
-
-    let query = {
-      $or: [
-        { product: req.params.id },
-        ...(prodIdObj ? [{ product: prodIdObj }] : []),
-      ],
-    };
-
-    let reviews = await Review.find(query)
-      .populate('user', 'name')
-      .sort({ createdAt: -1 });
-
-    if (!reviews || reviews.length === 0) {
-      try {
-        const rawReviews = await mongoose.connection.db
-          .collection('reviews')
-          .find(query)
-          .sort({ createdAt: -1 })
-          .toArray();
-        if (rawReviews && rawReviews.length > 0) {
-          reviews = rawReviews;
-        } else {
-          const rawReviewSingular = await mongoose.connection.db
-            .collection('review')
-            .find(query)
-            .sort({ createdAt: -1 })
-            .toArray();
-          if (rawReviewSingular && rawReviewSingular.length > 0) {
-            reviews = rawReviewSingular;
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    return res.status(200).json({ success: true, count: reviews.length, reviews });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// POST /api/products/:id/reviews
-app.post('/api/products/:id/reviews', protect, async (req, res) => {
-  try {
-    const { rating, comment, name } = req.body;
-    if (!comment || !rating) {
-      return res.status(400).json({ success: false, message: 'Rating and comment are required' });
-    }
-
-    const { ObjectId } = mongoose.Types;
-    const prodIdObj = ObjectId.isValid(req.params.id) ? new ObjectId(req.params.id) : null;
-
-    let product = await Product.findById(req.params.id).catch(() => null);
-    if (!product && prodIdObj) {
-      product = await mongoose.connection.db
-        .collection('product')
-        .findOne({ _id: prodIdObj })
-        .catch(() => null);
-    }
-
-    const reviewerName = req.user?.name || name || 'Verified Customer';
-
-    const review = await Review.create({
-      user: req.user._id,
-      product: prodIdObj || req.params.id,
-      name: reviewerName,
-      rating: Number(rating),
-      comment: comment.trim(),
-    });
-
-    // Update product rating and numReviews in MongoDB
-    const allReviews = await Review.find({
-      $or: [
-        { product: req.params.id },
-        ...(prodIdObj ? [{ product: prodIdObj }] : []),
-      ],
-    });
-
-    const numReviews = allReviews.length;
-    const avgRating = Number(
-      (allReviews.reduce((acc, item) => item.rating + acc, 0) / numReviews).toFixed(1)
-    );
-
-    if (product) {
-      if (product.save) {
-        product.numReviews = numReviews;
-        product.rating = avgRating;
-        await product.save().catch(() => {});
-      } else {
-        await mongoose.connection.db.collection('product').updateOne(
-          { _id: prodIdObj || product._id },
-          { $set: { numReviews: numReviews, rating: avgRating } }
-        ).catch(() => {});
-      }
-    }
-
-    return res.status(201).json({ success: true, review });
-  } catch (error) {
-    return res.status(400).json({ success: false, message: error.message });
-  }
-});
-
-/* ==========================================================================
-   CART ROUTES
-   ========================================================================== */
-
-// GET /api/cart
-app.get('/api/cart', protect, async (req, res) => {
-  try {
-    let cart = await Cart.findOne({ user: req.user._id }).populate('items.product');
-    if (!cart) {
-      cart = await Cart.create({ user: req.user._id, items: [] });
-    }
-    return res.status(200).json({ success: true, items: cart.items });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// POST /api/cart
-app.post('/api/cart', protect, async (req, res) => {
-  try {
-    const { productId, qty = 1 } = req.body;
-    let cart = await Cart.findOne({ user: req.user._id });
-    if (!cart) {
-      cart = await Cart.create({ user: req.user._id, items: [] });
-    }
-
-    const itemIndex = cart.items.findIndex(
-      (item) => item.product.toString() === productId
-    );
-
-    if (itemIndex > -1) {
-      cart.items[itemIndex].qty += Number(qty);
-    } else {
-      cart.items.push({ product: productId, qty: Number(qty) });
-    }
-
-    await cart.save();
-    const updated = await Cart.findById(cart._id).populate('items.product');
-    return res.status(200).json({ success: true, items: updated.items });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// PUT /api/cart/:id
-app.put('/api/cart/:id', protect, async (req, res) => {
-  try {
-    const { qty } = req.body;
-    const cart = await Cart.findOne({ user: req.user._id });
-    if (!cart) {
-      return res.status(404).json({ success: false, message: 'Cart not found' });
-    }
-
-    const itemIndex = cart.items.findIndex(
-      (item) => item.product.toString() === req.params.id || item._id.toString() === req.params.id
-    );
-
-    if (itemIndex > -1) {
-      if (qty <= 0) {
-        cart.items.splice(itemIndex, 1);
-      } else {
-        cart.items[itemIndex].qty = Number(qty);
-      }
-      await cart.save();
-    }
-
-    const updated = await Cart.findById(cart._id).populate('items.product');
-    return res.status(200).json({ success: true, items: updated.items });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// DELETE /api/cart/:id
-app.delete('/api/cart/:id', protect, async (req, res) => {
-  try {
-    const cart = await Cart.findOne({ user: req.user._id });
-    if (cart) {
-      cart.items = cart.items.filter(
-        (item) =>
-          item.product.toString() !== req.params.id &&
-          item._id.toString() !== req.params.id
-      );
-      await cart.save();
-    }
-    return res.status(200).json({ success: true, message: 'Item removed from cart' });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// DELETE /api/cart
-app.delete('/api/cart', protect, async (req, res) => {
-  try {
-    await Cart.findOneAndUpdate({ user: req.user._id }, { items: [] });
-    return res.status(200).json({ success: true, message: 'Cart cleared' });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-/* ==========================================================================
-   WISHLIST ROUTES
-   ========================================================================== */
-
-// GET /api/wishlist
-app.get('/api/wishlist', protect, async (req, res) => {
-  try {
-    let wishlist = await Wishlist.findOne({ user: req.user._id }).populate('products');
-    if (!wishlist) {
-      wishlist = await Wishlist.create({ user: req.user._id, products: [] });
-    }
-    return res.status(200).json({ success: true, products: wishlist.products });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// POST /api/wishlist
-app.post('/api/wishlist', protect, async (req, res) => {
-  try {
-    const { productId } = req.body;
-    let wishlist = await Wishlist.findOne({ user: req.user._id });
-    if (!wishlist) {
-      wishlist = await Wishlist.create({ user: req.user._id, products: [] });
-    }
-
-    if (!wishlist.products.includes(productId)) {
-      wishlist.products.push(productId);
-      await wishlist.save();
-    }
-
-    const updated = await Wishlist.findById(wishlist._id).populate('products');
-    return res.status(200).json({ success: true, products: updated.products });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// DELETE /api/wishlist/:id
-app.delete('/api/wishlist/:id', protect, async (req, res) => {
-  try {
-    const wishlist = await Wishlist.findOne({ user: req.user._id });
-    if (wishlist) {
-      wishlist.products = wishlist.products.filter(
-        (p) => p.toString() !== req.params.id
-      );
-      await wishlist.save();
-    }
-    return res.status(200).json({ success: true, message: 'Removed from wishlist' });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-/* ==========================================================================
-   ORDER ROUTES (WITH LOCATION TRACKING)
-   ========================================================================== */
-
-// POST /api/orders
-app.post('/api/orders', protect, async (req, res) => {
-  try {
-    const {
-      orderItems,
-      shippingAddress,
-      paymentMethod,
-      itemsPrice,
-      shippingPrice,
-      taxPrice,
-      totalPrice,
-    } = req.body;
-
-    if (!orderItems || orderItems.length === 0) {
-      return res.status(400).json({ success: false, message: 'No order items specified' });
-    }
-
-    const trackingNumber = `SS-TRK-${Math.floor(100000 + Math.random() * 900000)}`;
-    const initialLocation = 'ShopSphere Central Hub, Nashik';
-
-    const order = await Order.create({
-      user: req.user._id,
-      orderItems,
-      shippingAddress,
-      paymentMethod: paymentMethod || 'Cash on Delivery',
-      paymentStatus: 'Pending',
-      itemsPrice,
-      shippingPrice,
-      taxPrice,
-      totalPrice,
-      orderStatus: 'Confirmed',
-      trackingNumber,
-      courierPartner: 'ShopSphere Express Courier',
-      currentLocation: initialLocation,
-      trackingHistory: [
-        {
-          status: 'Confirmed',
-          location: initialLocation,
-          description: 'Order confirmed and registered for dispatch',
-          timestamp: new Date(),
-        },
-      ],
-    });
-
-    // Clear remote cart after order
-    await Cart.findOneAndUpdate({ user: req.user._id }, { items: [] });
-
-    return res.status(201).json({ success: true, order });
-  } catch (error) {
-    return res.status(400).json({ success: false, message: error.message });
-  }
-});
-
-// GET /api/orders
-app.get('/api/orders', protect, async (req, res) => {
-  try {
-    const orders = await Order.find({ user: req.user._id }).sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, count: orders.length, orders });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// GET /api/orders/:id
-app.get('/api/orders/:id', protect, async (req, res) => {
-  try {
-    const order = await Order.findById(req.params.id);
-    if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
-    }
-    return res.status(200).json({ success: true, order });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// PUT /api/orders/:id/cancel
-app.put('/api/orders/:id/cancel', protect, async (req, res) => {
-  try {
-    const order = await Order.findById(req.params.id);
-    if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
-    }
-
-    if (order.orderStatus === 'Delivered' || order.orderStatus === 'Cancelled') {
-      return res.status(400).json({ success: false, message: 'Cannot cancel this order in its current status' });
-    }
-
-    order.orderStatus = 'Cancelled';
-    order.trackingHistory.push({
-      status: 'Cancelled',
-      location: order.currentLocation || 'Order Facility',
-      description: 'Order was cancelled by customer',
-      timestamp: new Date(),
-    });
-
-    await order.save();
-
-    return res.status(200).json({ success: true, order });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// Helper: Guess Category Emoji / Icon
-const getCategoryIcon = (name = '') => {
-  const n = (name || '').toLowerCase();
-  if (n.includes('elect') || n.includes('phone') || n.includes('headphone') || n.includes('audio') || n.includes('gadget') || n.includes('tech')) return '📱';
-  if (n.includes('fash') || n.includes('cloth') || n.includes('apparel') || n.includes('wear') || n.includes('shirt')) return '👕';
-  if (n.includes('beauty') || n.includes('cosmetic') || n.includes('skin') || n.includes('care')) return '✨';
-  if (n.includes('home') || n.includes('kitchen') || n.includes('furnitur') || n.includes('decor')) return '🏠';
-  if (n.includes('sport') || n.includes('fit') || n.includes('gym') || n.includes('outdoor')) return '⚽';
-  if (n.includes('book') || n.includes('read') || n.includes('stationery') || n.includes('study')) return '📚';
-  if (n.includes('access') || n.includes('bag') || n.includes('watch') || n.includes('jewelry') || n.includes('glasses')) return '🎒';
-  if (n.includes('game') || n.includes('gaming') || n.includes('console')) return '🎮';
-  if (n.includes('toy') || n.includes('kid') || n.includes('baby')) return '🧸';
-  if (n.includes('food') || n.includes('grocery') || n.includes('snack') || n.includes('drink')) return '🍔';
-  if (n.includes('shoe') || n.includes('footwear') || n.includes('sneaker')) return '👟';
-  if (n.includes('auto') || n.includes('car') || n.includes('bike') || n.includes('motor')) return '🚗';
-  return '🏷️';
-};
-
-/* ==========================================================================
-   CATEGORY ROUTES (AUTO-DETECT FROM PRODUCTS & DATABASE)
-   ========================================================================== */
-
-// GET /api/categories
-app.get('/api/categories', async (req, res) => {
-  try {
-    let dbCategories = await Category.find({}).sort({ name: 1 });
-    if (!dbCategories || dbCategories.length === 0) {
-      try {
-        const rawCats = await mongoose.connection.db.collection('category').find({}).sort({ name: 1 }).toArray();
-        if (rawCats && rawCats.length > 0) {
-          dbCategories = rawCats;
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    // Get all products to compute product counts and auto-discover categories
-    let allProducts = await Product.find({}).select('category');
-    if (!allProducts || allProducts.length === 0) {
-      try {
-        const rawProds = await mongoose.connection.db.collection('product').find({}).project({ category: 1 }).toArray();
-        if (rawProds && rawProds.length > 0) {
-          allProducts = rawProds;
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    // Count products per category
-    const categoryCounts = {};
-    (allProducts || []).forEach((p) => {
-      if (p.category && typeof p.category === 'string') {
-        const catClean = p.category.trim();
-        const catKey = catClean.toLowerCase();
-        categoryCounts[catKey] = (categoryCounts[catKey] || 0) + 1;
-      }
-    });
-
-    const categoriesMap = new Map();
-
-    // Add registered categories
-    (dbCategories || []).forEach((c) => {
-      const name = c.name?.trim() || '';
-      if (!name) return;
-      const count = categoryCounts[name.toLowerCase()] || 0;
-      categoriesMap.set(name.toLowerCase(), {
-        _id: c._id || c.id,
-        name: name,
-        icon: c.icon || getCategoryIcon(name),
-        description: c.description || `${count} ${count === 1 ? 'Product' : 'Products'}`,
-        count: `${count} ${count === 1 ? 'Product' : 'Products'}`,
-        productCount: count,
+    if (!admin) {
+      const password =
+        await bcrypt.hash(
+          "admin123",
+          10
+        );
+
+      admin = await User.create({
+        name: "ShopSphere Admin",
+        email: "admin@shopsphere.com",
+        password,
+        role: "admin",
+        phone: "9876543210",
+        address: "ShopSphere Headquarters",
       });
+
+      console.log(
+        "Admin created:"
+      );
+
+      console.log(
+        "admin@shopsphere.com / admin123"
+      );
+    }
+
+    let user = await User.findOne({
+      email: "user@shopsphere.com",
     });
 
-    // Auto-add any category that exists on products but not in Category collection
-    (allProducts || []).forEach((p) => {
-      if (p.category && typeof p.category === 'string') {
-        const name = p.category.trim();
-        const key = name.toLowerCase();
-        if (!categoriesMap.has(key)) {
-          const count = categoryCounts[key] || 1;
-          const autoCat = {
-            name: name,
-            icon: getCategoryIcon(name),
-            description: `${count} ${count === 1 ? 'Product' : 'Products'}`,
-            count: `${count} ${count === 1 ? 'Product' : 'Products'}`,
-            productCount: count,
-          };
-          categoriesMap.set(key, autoCat);
-
-          // Auto-persist new category into MongoDB in background
-          Category.create({
-            name: name,
-            icon: autoCat.icon,
-            description: `Collection for ${name}`,
-          }).catch(() => {});
-        }
-      }
-    });
-
-    const finalCategories = Array.from(categoriesMap.values());
-    return res.status(200).json({ success: true, count: finalCategories.length, categories: finalCategories });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// POST /api/categories
-app.post('/api/categories', protect, adminOnly, async (req, res) => {
-  try {
-    const payload = {
-      ...req.body,
-      icon: req.body.icon || getCategoryIcon(req.body.name),
-    };
-    const category = await Category.create(payload);
-    return res.status(201).json({ success: true, category });
-  } catch (error) {
-    return res.status(400).json({ success: false, message: error.message });
-  }
-});
-
-// PUT /api/categories/:id
-app.put('/api/categories/:id', protect, adminOnly, async (req, res) => {
-  try {
-    const category = await Category.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-    return res.status(200).json({ success: true, category });
-  } catch (error) {
-    return res.status(400).json({ success: false, message: error.message });
-  }
-});
-
-// DELETE /api/categories/:id
-app.delete('/api/categories/:id', protect, adminOnly, async (req, res) => {
-  try {
-    const category = await Category.findByIdAndDelete(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-    return res.status(200).json({ success: true, message: 'Category deleted' });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-/* ==========================================================================
-   ADMIN ROUTES (WITH LIVE STATUS & LOCATION MANAGEMENT)
-   ========================================================================== */
-
-// GET /api/admin/orders
-app.get('/api/admin/orders', protect, adminOnly, async (req, res) => {
-  try {
-    const orders = await Order.find({})
-      .populate('user', 'name email')
-      .sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, count: orders.length, orders });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// PUT /api/admin/orders/:id/status
-app.put('/api/admin/orders/:id/status', protect, adminOnly, async (req, res) => {
-  try {
-    const { orderStatus, currentLocation, note } = req.body;
-    const order = await Order.findById(req.params.id);
-    if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
-    }
-
-    if (orderStatus) {
-      order.orderStatus = orderStatus;
-      if (orderStatus === 'Delivered') {
-        order.paymentStatus = 'Paid';
-      }
-    }
-
-    if (currentLocation) {
-      order.currentLocation = currentLocation;
-    }
-
-    const locDesc =
-      note ||
-      (orderStatus === 'Shipped'
-        ? 'Package left origin facility and is in transit'
-        : orderStatus === 'Out for Delivery'
-        ? 'Delivery courier agent is en route to customer destination'
-        : orderStatus === 'Delivered'
-        ? 'Package delivered to recipient successfully'
-        : `Status updated to ${orderStatus}`);
-
-    order.trackingHistory.push({
-      status: orderStatus || order.orderStatus,
-      location: currentLocation || order.currentLocation || 'Transit Facility',
-      description: locDesc,
-      timestamp: new Date(),
-    });
-
-    await order.save();
-
-    return res.status(200).json({ success: true, order });
-  } catch (error) {
-    return res.status(400).json({ success: false, message: error.message });
-  }
-});
-
-// GET /api/admin/users
-app.get('/api/admin/users', protect, adminOnly, async (req, res) => {
-  try {
-    const users = await User.find({}).select('-password').sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, count: users.length, users });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-// PUT /api/admin/users/:id/role
-app.put('/api/admin/users/:id/role', protect, adminOnly, async (req, res) => {
-  try {
-    const { role } = req.body;
-    const user = await User.findById(req.params.id);
     if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+      const password =
+        await bcrypt.hash(
+          "123456",
+          10
+        );
+
+      user = await User.create({
+        name: "Demo User",
+        email: "user@shopsphere.com",
+        password,
+        role: "user",
+        phone: "9876543211",
+        address: "Nashik",
+      });
+
+      console.log(
+        "Demo user created:"
+      );
+
+      console.log(
+        "user@shopsphere.com / 123456"
+      );
     }
-
-    user.role = role;
-    await user.save();
-
-    return res.status(200).json({
-      success: true,
-      user: {
-        _id: user._id,
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isActive: user.isActive,
-      },
-    });
   } catch (error) {
-    return res.status(400).json({ success: false, message: error.message });
+    console.log(
+      "Default user error:",
+      error.message
+    );
   }
-});
+};
 
-// PUT /api/admin/users/:id/status
-app.put('/api/admin/users/:id/status', protect, adminOnly, async (req, res) => {
-  try {
-    const { isActive } = req.body;
-    const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+/* =========================================================
+   ROOT
+========================================================= */
 
-    user.isActive = Boolean(isActive);
-    await user.save();
-
-    return res.status(200).json({
-      success: true,
-      user: {
-        _id: user._id,
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isActive: user.isActive,
-      },
-    });
-  } catch (error) {
-    return res.status(400).json({ success: false, message: error.message });
-  }
-});
-
-// Root Health Route
-app.get('/', (req, res) => {
+app.get("/", (req, res) => {
   res.json({
     success: true,
-    message: 'ShopSphere API server is up and running',
+    message:
+      "ShopSphere API is running",
   });
 });
 
-const PORT = process.env.PORT || 5000;
+/* =========================================================
+   USER REGISTER
+========================================================= */
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  connectDB();
-});
+app.post(
+  "/api/users/register",
+  async (req, res) => {
+    try {
+      const {
+        name,
+        email,
+        password,
+        phone,
+        address,
+      } = req.body;
+
+      if (
+        !name ||
+        !email ||
+        !password
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Name, email and password are required",
+        });
+      }
+
+      const existingUser =
+        await User.findOne({
+          email:
+            email.toLowerCase(),
+        });
+
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "User already exists",
+        });
+      }
+
+      const hashedPassword =
+        await bcrypt.hash(
+          password,
+          10
+        );
+
+      const user =
+        await User.create({
+          name,
+          email:
+            email.toLowerCase(),
+          password:
+            hashedPassword,
+          phone:
+            phone || "",
+          address:
+            address || "",
+          role: "user",
+        });
+
+      const token =
+        generateToken(
+          user._id,
+          user.role
+        );
+
+      res.status(201).json({
+        success: true,
+        token,
+        user: {
+          _id: user._id,
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          address: user.address,
+          role: user.role,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "REGISTER ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* =========================================================
+   USER LOGIN
+========================================================= */
+
+app.post(
+  "/api/users/login",
+  async (req, res) => {
+    try {
+      const {
+        email,
+        password,
+      } = req.body;
+
+      if (
+        !email ||
+        !password
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Email and password are required",
+        });
+      }
+
+      const user =
+        await User.findOne({
+          email:
+            email.toLowerCase(),
+        });
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message:
+            "Invalid email or password",
+        });
+      }
+
+      const match =
+        await bcrypt.compare(
+          password,
+          user.password
+        );
+
+      if (!match) {
+        return res.status(401).json({
+          success: false,
+          message:
+            "Invalid email or password",
+        });
+      }
+
+      const token =
+        generateToken(
+          user._id,
+          user.role
+        );
+
+      res.json({
+        success: true,
+        token,
+        user: {
+          _id: user._id,
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          address: user.address,
+          role: user.role,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* =========================================================
+   USER PROFILE
+========================================================= */
+
+app.get(
+  "/api/users/profile",
+  protect,
+  async (req, res) => {
+    res.json({
+      success: true,
+      user: req.user,
+    });
+  }
+);
+
+/* =========================================================
+   UPDATE PROFILE
+========================================================= */
+
+app.put(
+  "/api/users/profile",
+  protect,
+  async (req, res) => {
+    try {
+      const user =
+        await User.findById(
+          req.user._id
+        );
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      if (req.body.name) {
+        user.name =
+          req.body.name;
+      }
+
+      if (
+        req.body.phone !==
+        undefined
+      ) {
+        user.phone =
+          req.body.phone;
+      }
+
+      if (
+        req.body.address !==
+        undefined
+      ) {
+        user.address =
+          req.body.address;
+      }
+
+      if (req.body.password) {
+        user.password =
+          await bcrypt.hash(
+            req.body.password,
+            10
+          );
+      }
+
+      await user.save();
+
+      res.json({
+        success: true,
+        user,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* =========================================================
+   GET PRODUCTS
+========================================================= */
+
+app.get(
+  "/api/products",
+  async (req, res) => {
+    try {
+      const {
+        category,
+        search,
+        minPrice,
+        maxPrice,
+        sort,
+      } = req.query;
+
+      const query = {};
+
+      if (
+        category &&
+        category !== "All"
+      ) {
+        query.category = {
+          $regex: category,
+          $options: "i",
+        };
+      }
+
+      if (search) {
+        query.$or = [
+          {
+            name: {
+              $regex: search,
+              $options: "i",
+            },
+          },
+          {
+            description: {
+              $regex: search,
+              $options: "i",
+            },
+          },
+          {
+            brand: {
+              $regex: search,
+              $options: "i",
+            },
+          },
+          {
+            category: {
+              $regex: search,
+              $options: "i",
+            },
+          },
+        ];
+      }
+
+      if (
+        minPrice ||
+        maxPrice
+      ) {
+        query.price = {};
+
+        if (minPrice) {
+          query.price.$gte =
+            Number(minPrice);
+        }
+
+        if (maxPrice) {
+          query.price.$lte =
+            Number(maxPrice);
+        }
+      }
+
+      let sortOption = {
+        createdAt: -1,
+      };
+
+      if (sort === "price-low") {
+        sortOption = {
+          price: 1,
+        };
+      }
+
+      if (sort === "price-high") {
+        sortOption = {
+          price: -1,
+        };
+      }
+
+      if (sort === "rating") {
+        sortOption = {
+          rating: -1,
+        };
+      }
+
+      if (sort === "name") {
+        sortOption = {
+          name: 1,
+        };
+      }
+
+      const products =
+        await Product.find(
+          query
+        ).sort(sortOption);
+
+      res.json({
+        success: true,
+        count: products.length,
+        products,
+      });
+    } catch (error) {
+      console.error(
+        "GET PRODUCTS ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* =========================================================
+   GET SINGLE PRODUCT
+========================================================= */
+
+app.get(
+  "/api/products/:id",
+  async (req, res) => {
+    try {
+      const product =
+        await Product.findById(
+          req.params.id
+        );
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Product not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        product,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message:
+          "Invalid product ID",
+      });
+    }
+  }
+);
+
+/* =========================================================
+   ADD PRODUCT
+   SINGLE + BULK
+========================================================= */
+
+app.post(
+  "/api/products",
+  async (req, res) => {
+    try {
+      console.log(
+        "================================"
+      );
+
+      console.log(
+        "POST /api/products"
+      );
+
+      console.log(
+        "Request received"
+      );
+
+      console.log(
+        "================================"
+      );
+
+      /* ---------------------------------------------------
+         BULK PRODUCT INSERT
+      --------------------------------------------------- */
+
+      if (
+        Array.isArray(
+          req.body
+        )
+      ) {
+        const products =
+          req.body;
+
+        if (
+          products.length === 0
+        ) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Product array is empty",
+          });
+        }
+
+        const preparedProducts =
+          [];
+
+        for (
+          let i = 0;
+          i < products.length;
+          i++
+        ) {
+          const item =
+            products[i];
+
+          if (
+            !item.name ||
+            item.name.trim() === ""
+          ) {
+            return res.status(400).json({
+              success: false,
+              message:
+                `Product name is required at index ${i}`,
+            });
+          }
+
+          if (
+            item.price ===
+              undefined ||
+            item.price === null ||
+            item.price === ""
+          ) {
+            return res.status(400).json({
+              success: false,
+              message:
+                `Product price is required at index ${i}`,
+            });
+          }
+
+          if (
+            !item.category ||
+            item.category.trim() === ""
+          ) {
+            return res.status(400).json({
+              success: false,
+              message:
+                `Product category is required at index ${i}`,
+            });
+          }
+
+          preparedProducts.push({
+            name:
+              item.name.trim(),
+
+            description:
+              item.description ||
+              "",
+
+            price:
+              Number(
+                item.price
+              ),
+
+            originalPrice:
+              item.originalPrice !==
+                undefined &&
+              item.originalPrice !==
+                null &&
+              item.originalPrice !==
+                ""
+                ? Number(
+                    item.originalPrice
+                  )
+                : 0,
+
+            category:
+              item.category.trim(),
+
+            brand:
+              item.brand ||
+              "ShopSphere",
+
+            stock:
+              item.stock !==
+                undefined &&
+              item.stock !==
+                null &&
+              item.stock !==
+                ""
+                ? Number(
+                    item.stock
+                  )
+                : 0,
+
+            image:
+              item.image ||
+              "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600",
+
+            rating:
+              item.rating !==
+                undefined &&
+              item.rating !==
+                null &&
+              item.rating !==
+                ""
+                ? Number(
+                    item.rating
+                  )
+                : 0,
+
+            numReviews:
+              item.numReviews !==
+                undefined &&
+              item.numReviews !==
+                null &&
+              item.numReviews !==
+                ""
+                ? Number(
+                    item.numReviews
+                  )
+                : 0,
+
+            featured:
+              item.featured ===
+                true ||
+              item.featured ===
+                "true",
+          });
+        }
+
+        const savedProducts =
+          await Product.insertMany(
+            preparedProducts
+          );
+
+        console.log(
+          `${savedProducts.length} products saved`
+        );
+
+        return res.status(201).json({
+          success: true,
+          message:
+            `${savedProducts.length} products added successfully`,
+          count:
+            savedProducts.length,
+          products:
+            savedProducts,
+        });
+      }
+
+      /* ---------------------------------------------------
+         SINGLE PRODUCT
+      --------------------------------------------------- */
+
+      const {
+        name,
+        description,
+        price,
+        originalPrice,
+        category,
+        brand,
+        stock,
+        image,
+        rating,
+        numReviews,
+        featured,
+      } = req.body;
+
+      if (
+        !name ||
+        name.trim() === ""
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Product name is required",
+        });
+      }
+
+      if (
+        price === undefined ||
+        price === null ||
+        price === ""
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Product price is required",
+        });
+      }
+
+      if (
+        !category ||
+        category.trim() === ""
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Product category is required",
+        });
+      }
+
+      const product =
+        await Product.create({
+          name:
+            name.trim(),
+
+          description:
+            description || "",
+
+          price:
+            Number(price),
+
+          originalPrice:
+            originalPrice !==
+              undefined &&
+            originalPrice !==
+              null &&
+            originalPrice !==
+              ""
+              ? Number(
+                  originalPrice
+                )
+              : 0,
+
+          category:
+            category.trim(),
+
+          brand:
+            brand ||
+            "ShopSphere",
+
+          stock:
+            stock !==
+              undefined &&
+            stock !== null &&
+            stock !== ""
+              ? Number(stock)
+              : 0,
+
+          image:
+            image ||
+            "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600",
+
+          rating:
+            rating !==
+              undefined &&
+            rating !== null &&
+            rating !== ""
+              ? Number(rating)
+              : 0,
+
+          numReviews:
+            numReviews !==
+              undefined &&
+            numReviews !== null &&
+            numReviews !== ""
+              ? Number(numReviews)
+              : 0,
+
+          featured:
+            featured === true ||
+            featured === "true",
+        });
+
+      console.log(
+        "Product saved:",
+        product._id
+      );
+
+      return res.status(201).json({
+        success: true,
+        message:
+          "Product added successfully",
+        product,
+      });
+    } catch (error) {
+      console.error(
+        "ADD PRODUCT ERROR:",
+        error
+      );
+
+      return res.status(400).json({
+        success: false,
+        message:
+          "Failed to add product",
+        error:
+          error.message,
+      });
+    }
+  }
+);
+
+/* =========================================================
+   UPDATE PRODUCT
+========================================================= */
+
+app.put(
+  "/api/products/:id",
+  async (req, res) => {
+    try {
+      const product =
+        await Product.findByIdAndUpdate(
+          req.params.id,
+          req.body,
+          {
+            new: true,
+            runValidators: true,
+          }
+        );
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Product not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        message:
+          "Product updated successfully",
+        product,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* =========================================================
+   DELETE PRODUCT
+========================================================= */
+
+app.delete(
+  "/api/products/:id",
+  async (req, res) => {
+    try {
+      const product =
+        await Product.findByIdAndDelete(
+          req.params.id
+        );
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Product not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        message:
+          "Product deleted successfully",
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* =========================================================
+   REVIEWS
+========================================================= */
+
+app.get(
+  "/api/products/:id/reviews",
+  async (req, res) => {
+    try {
+      const reviews =
+        await Review.find({
+          product:
+            req.params.id,
+        })
+          .populate(
+            "user",
+            "name"
+          )
+          .sort({
+            createdAt: -1,
+          });
+
+      res.json({
+        success: true,
+        reviews,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+app.post(
+  "/api/products/:id/reviews",
+  protect,
+  async (req, res) => {
+    try {
+      const {
+        rating,
+        comment,
+      } = req.body;
+
+      if (!rating) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Rating is required",
+        });
+      }
+
+      const existing =
+        await Review.findOne({
+          product:
+            req.params.id,
+          user:
+            req.user._id,
+        });
+
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "You already reviewed this product",
+        });
+      }
+
+      const review =
+        await Review.create({
+          product:
+            req.params.id,
+          user:
+            req.user._id,
+          rating:
+            Number(rating),
+          comment:
+            comment || "",
+        });
+
+      const reviews =
+        await Review.find({
+          product:
+            req.params.id,
+        });
+
+      const product =
+        await Product.findById(
+          req.params.id
+        );
+
+      if (product) {
+        const total =
+          reviews.reduce(
+            (sum, item) =>
+              sum +
+              Number(
+                item.rating
+              ),
+            0
+          );
+
+        product.rating =
+          reviews.length
+            ? total /
+              reviews.length
+            : 0;
+
+        product.numReviews =
+          reviews.length;
+
+        await product.save();
+      }
+
+      res.status(201).json({
+        success: true,
+        review,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* =========================================================
+   CART
+========================================================= */
+
+app.get(
+  "/api/cart",
+  protect,
+  async (req, res) => {
+    try {
+      const cart =
+        await Cart.findOne({
+          user:
+            req.user._id,
+        }).populate(
+          "items.product"
+        );
+
+      res.json({
+        success: true,
+        cart:
+          cart || {
+            user:
+              req.user._id,
+            items: [],
+          },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+app.post(
+  "/api/cart",
+  protect,
+  async (req, res) => {
+    try {
+      const {
+        productId,
+        product,
+        quantity = 1,
+      } = req.body;
+
+      const id =
+        productId ||
+        product?._id ||
+        product?.id;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Product ID is required",
+        });
+      }
+
+      let cart =
+        await Cart.findOne({
+          user:
+            req.user._id,
+        });
+
+      if (!cart) {
+        cart =
+          await Cart.create({
+            user:
+              req.user._id,
+            items: [],
+          });
+      }
+
+      const existing =
+        cart.items.find(
+          (item) =>
+            item.product.toString() ===
+            id.toString()
+        );
+
+      if (existing) {
+        existing.quantity +=
+          Number(quantity);
+      } else {
+        cart.items.push({
+          product: id,
+          quantity:
+            Number(quantity),
+        });
+      }
+
+      await cart.save();
+
+      await cart.populate(
+        "items.product"
+      );
+
+      res.status(201).json({
+        success: true,
+        cart,
+      });
+    } catch (error) {
+      console.error(
+        "CART ERROR:",
+        error
+      );
+
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+app.put(
+  "/api/cart/:id",
+  protect,
+  async (req, res) => {
+    try {
+      const cart =
+        await Cart.findOne({
+          user:
+            req.user._id,
+        });
+
+      if (!cart) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Cart not found",
+        });
+      }
+
+      const item =
+        cart.items.find(
+          (item) =>
+            item._id.toString() ===
+            req.params.id
+        );
+
+      if (!item) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Cart item not found",
+        });
+      }
+
+      item.quantity =
+        Number(
+          req.body.quantity
+        );
+
+      if (item.quantity <= 0) {
+        cart.items =
+          cart.items.filter(
+            (x) =>
+              x._id.toString() !==
+              req.params.id
+          );
+      }
+
+      await cart.save();
+
+      await cart.populate(
+        "items.product"
+      );
+
+      res.json({
+        success: true,
+        cart,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+app.delete(
+  "/api/cart/:id",
+  protect,
+  async (req, res) => {
+    try {
+      const cart =
+        await Cart.findOne({
+          user:
+            req.user._id,
+        });
+
+      if (!cart) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Cart not found",
+        });
+      }
+
+      cart.items =
+        cart.items.filter(
+          (item) =>
+            item._id.toString() !==
+            req.params.id
+        );
+
+      await cart.save();
+
+      await cart.populate(
+        "items.product"
+      );
+
+      res.json({
+        success: true,
+        cart,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+app.delete(
+  "/api/cart",
+  protect,
+  async (req, res) => {
+    try {
+      await Cart.findOneAndDelete({
+        user:
+          req.user._id,
+      });
+
+      res.json({
+        success: true,
+        message:
+          "Cart cleared successfully",
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* =========================================================
+   WISHLIST
+========================================================= */
+
+/*
+   Your Wishlist model:
+
+   user
+   products: [Product IDs]
+
+   Therefore wishlist is stored in:
+   shopsphere
+      └── wishlists
+*/
+
+/* GET WISHLIST */
+
+app.get(
+  "/api/wishlist",
+  protect,
+  async (req, res) => {
+    try {
+      let wishlist =
+        await Wishlist.findOne({
+          user:
+            req.user._id,
+        }).populate(
+          "products"
+        );
+
+      if (!wishlist) {
+        wishlist =
+          await Wishlist.create({
+            user:
+              req.user._id,
+            products: [],
+          });
+
+        await wishlist.populate(
+          "products"
+        );
+      }
+
+      res.json({
+        success: true,
+        wishlist,
+        products:
+          wishlist.products,
+      });
+    } catch (error) {
+      console.error(
+        "GET WISHLIST ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* ADD TO WISHLIST */
+
+app.post(
+  "/api/wishlist",
+  protect,
+  async (req, res) => {
+    try {
+      const productId =
+        req.body.productId ||
+        req.body.product?._id ||
+        req.body.product?.id;
+
+      if (!productId) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Product ID is required",
+        });
+      }
+
+      const product =
+        await Product.findById(
+          productId
+        );
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Product not found",
+        });
+      }
+
+      let wishlist =
+        await Wishlist.findOne({
+          user:
+            req.user._id,
+        });
+
+      if (!wishlist) {
+        wishlist =
+          await Wishlist.create({
+            user:
+              req.user._id,
+            products: [],
+          });
+      }
+
+      const alreadyExists =
+        wishlist.products.some(
+          (id) =>
+            id.toString() ===
+            productId.toString()
+        );
+
+      if (!alreadyExists) {
+        wishlist.products.push(
+          productId
+        );
+
+        await wishlist.save();
+      }
+
+      await wishlist.populate(
+        "products"
+      );
+
+      res.status(200).json({
+        success: true,
+        message:
+          "Product added to wishlist",
+        wishlist,
+        products:
+          wishlist.products,
+      });
+    } catch (error) {
+      console.error(
+        "ADD WISHLIST ERROR:",
+        error
+      );
+
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* REMOVE FROM WISHLIST */
+
+app.delete(
+  "/api/wishlist/:productId",
+  protect,
+  async (req, res) => {
+    try {
+      const wishlist =
+        await Wishlist.findOne({
+          user:
+            req.user._id,
+        });
+
+      if (!wishlist) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Wishlist not found",
+        });
+      }
+
+      wishlist.products =
+        wishlist.products.filter(
+          (id) =>
+            id.toString() !==
+            req.params.productId
+        );
+
+      await wishlist.save();
+
+      await wishlist.populate(
+        "products"
+      );
+
+      res.json({
+        success: true,
+        message:
+          "Product removed from wishlist",
+        wishlist,
+        products:
+          wishlist.products,
+      });
+    } catch (error) {
+      console.error(
+        "REMOVE WISHLIST ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* =========================================================
+   ORDERS
+========================================================= */
+
+app.post(
+  "/api/orders",
+  protect,
+  async (req, res) => {
+    try {
+      const orderData = {
+        ...req.body,
+        user:
+          req.user._id,
+      };
+
+      const order =
+        await Order.create(
+          orderData
+        );
+
+      res.status(201).json({
+        success: true,
+        order,
+      });
+    } catch (error) {
+      console.error(
+        "CREATE ORDER ERROR:",
+        error
+      );
+
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+app.get(
+  "/api/orders",
+  protect,
+  async (req, res) => {
+    try {
+      const orders =
+        await Order.find({
+          user:
+            req.user._id,
+        }).sort({
+          createdAt: -1,
+        });
+
+      res.json({
+        success: true,
+        count:
+          orders.length,
+        orders,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+app.get(
+  "/api/orders/:id",
+  protect,
+  async (req, res) => {
+    try {
+      const order =
+        await Order.findById(
+          req.params.id
+        );
+
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Order not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        order,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+app.put(
+  "/api/orders/:id/cancel",
+  protect,
+  async (req, res) => {
+    try {
+      const order =
+        await Order.findById(
+          req.params.id
+        );
+
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Order not found",
+        });
+      }
+
+      order.orderStatus =
+        "Cancelled";
+
+      await order.save();
+
+      res.json({
+        success: true,
+        order,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* =========================================================
+   CATEGORIES
+========================================================= */
+
+app.get(
+  "/api/categories",
+  async (req, res) => {
+    try {
+      const categories =
+        await Category.find(
+          {}
+        ).sort({
+          name: 1,
+        });
+
+      res.json({
+        success: true,
+        count:
+          categories.length,
+        categories,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+app.post(
+  "/api/categories",
+  protect,
+  adminOnly,
+  async (req, res) => {
+    try {
+      const category =
+        await Category.create(
+          req.body
+        );
+
+      res.status(201).json({
+        success: true,
+        category,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+app.put(
+  "/api/categories/:id",
+  protect,
+  adminOnly,
+  async (req, res) => {
+    try {
+      const category =
+        await Category.findByIdAndUpdate(
+          req.params.id,
+          req.body,
+          {
+            new: true,
+            runValidators: true,
+          }
+        );
+
+      if (!category) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Category not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        category,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+app.delete(
+  "/api/categories/:id",
+  protect,
+  adminOnly,
+  async (req, res) => {
+    try {
+      await Category.findByIdAndDelete(
+        req.params.id
+      );
+
+      res.json({
+        success: true,
+        message:
+          "Category deleted successfully",
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* =========================================================
+   ADMIN - USERS
+========================================================= */
+
+app.get(
+  "/api/admin/users",
+  protect,
+  adminOnly,
+  async (req, res) => {
+    try {
+      const users =
+        await User.find({})
+          .select("-password")
+          .sort({
+            createdAt: -1,
+          });
+
+      res.json({
+        success: true,
+        count:
+          users.length,
+        users,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* CHANGE USER ROLE */
+
+app.put(
+  "/api/admin/users/:id/role",
+  protect,
+  adminOnly,
+  async (req, res) => {
+    try {
+      const user =
+        await User.findById(
+          req.params.id
+        );
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "User not found",
+        });
+      }
+
+      user.role =
+        req.body.role;
+
+      await user.save();
+
+      res.json({
+        success: true,
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        },
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* CHANGE USER STATUS */
+
+app.put(
+  "/api/admin/users/:id/status",
+  protect,
+  adminOnly,
+  async (req, res) => {
+    try {
+      const user =
+        await User.findById(
+          req.params.id
+        );
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "User not found",
+        });
+      }
+
+      user.isActive =
+        Boolean(
+          req.body.isActive
+        );
+
+      await user.save();
+
+      res.json({
+        success: true,
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isActive:
+            user.isActive,
+        },
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* =========================================================
+   ADMIN - ORDERS
+========================================================= */
+
+app.get(
+  "/api/admin/orders",
+  protect,
+  adminOnly,
+  async (req, res) => {
+    try {
+      const orders =
+        await Order.find({})
+          .populate(
+            "user",
+            "name email"
+          )
+          .sort({
+            createdAt: -1,
+          });
+
+      res.json({
+        success: true,
+        count:
+          orders.length,
+        orders,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+app.put(
+  "/api/admin/orders/:id/status",
+  protect,
+  adminOnly,
+  async (req, res) => {
+    try {
+      const order =
+        await Order.findById(
+          req.params.id
+        );
+
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Order not found",
+        });
+      }
+
+      if (
+        req.body.orderStatus
+      ) {
+        order.orderStatus =
+          req.body.orderStatus;
+      }
+
+      if (
+        req.body.paymentStatus
+      ) {
+        order.paymentStatus =
+          req.body.paymentStatus;
+      }
+
+      if (
+        req.body.currentLocation
+      ) {
+        order.currentLocation =
+          req.body.currentLocation;
+      }
+
+      await order.save();
+
+      res.json({
+        success: true,
+        order,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* =========================================================
+   ERROR HANDLER FOR INVALID JSON
+========================================================= */
+
+app.use(
+  (
+    error,
+    req,
+    res,
+    next
+  ) => {
+    if (
+      error instanceof
+      SyntaxError &&
+      error.status === 400 &&
+      "body" in error
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid JSON. Check commas, quotes and brackets.",
+      });
+    }
+
+    next(error);
+  }
+);
+
+/* =========================================================
+   START SERVER
+========================================================= */
+
+app.listen(
+  PORT,
+  async () => {
+    console.log(
+      `Server is running on port ${PORT}`
+    );
+
+    await connectDB();
+  }
+);

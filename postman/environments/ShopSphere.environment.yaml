@@ -1,0 +1,5 @@
+name: ShopSphere
+values:
+  - key: authToken
+    value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhYjhiMmEyN2M0YzIzZDIxNmQyOTk2YSIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc5MDQ5OTk2OSwiZXhwIjoxNzkzMDkxOTY5fQ.K60wRSh4Ed4m5cVQBlJ3W74kM80vMFjdZKPU3Y93Xrk'
+    enabled: true

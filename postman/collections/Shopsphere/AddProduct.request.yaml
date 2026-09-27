@@ -1,0 +1,47 @@
+$kind: http-request
+url: http://localhost:8080/api/products
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \  \"name\": \"Samsung Galaxy S25\",\r
+
+    \  \"description\": \"Powerful smartphone with advanced camera and high performance processor.\",\r
+
+    \  \"price\": 79999,\r
+
+    \  \"originalPrice\": 84999,\r
+
+    \  \"category\": \"Electronics\",\r
+
+    \  \"brand\": \"Samsung\",\r
+
+    \  \"stock\": 12,\r
+
+    \  \"image\": \"https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=600\",\r
+
+    \  \"rating\": 4.8,\r
+
+    \  \"numReviews\": 98,\r
+
+    \  \"featured\": true\r
+
+    }"
+auth:
+  type: bearer
+  credentials:
+    token: ad53f6eb-f654-4334-932f-05553894cac8
+scripts:
+  - type: afterResponse
+    code: |
+      pm.test("Status code is 401", function () {
+          pm.response.to.have.status(401);
+      });
+
+      pm.test("Response indicates failure and token failure message", function () {
+          var jsonData = pm.response.json();
+          pm.expect(jsonData.success).to.be.false;
+          pm.expect(jsonData.message).to.include("Not authorized, token failed");
+      });
+order: 1790499823136
