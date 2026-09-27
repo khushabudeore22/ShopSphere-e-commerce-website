@@ -55,112 +55,9 @@ const adminOnly = (req, res, next) => {
   return res.status(403).json({ success: false, message: 'Access denied: Admin role required' });
 };
 
-// Initial Seed Data
-const initialCategories = [
-  { name: 'Electronics', icon: '📱', description: 'Smartphones, Audio, Wearables and Smart Gadgets' },
-  { name: 'Fashion', icon: '👕', description: 'Men & Women Clothing, Footwear and Apparel' },
-  { name: 'Beauty', icon: '✨', description: 'Skincare, Makeup and Personal Wellness' },
-  { name: 'Home & Kitchen', icon: '🏠', description: 'Furniture, Decor, Kitchen Appliances and Bedding' },
-  { name: 'Sports', icon: '⚽', description: 'Fitness Gear, Sports Equipment and Outdoor Activewear' },
-  { name: 'Books', icon: '📚', description: 'Bestsellers, Academic, Literature and Stationery' },
-  { name: 'Accessories', icon: '🎒', description: 'Bags, Watches, Eyewear and Premium Accents' },
-];
-
-const initialProducts = [
-  {
-    name: 'Wireless Noise-Cancelling Headphones Pro',
-    description: 'Experience pure acoustic bliss with premium active noise cancellation, 40-hour battery life, and ultra-comfortable ear cushions.',
-    price: 3499,
-    originalPrice: 4999,
-    category: 'Electronics',
-    brand: 'SoundPulse',
-    stock: 25,
-    rating: 4.8,
-    numReviews: 128,
-    featured: true,
-    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Ultra-Slim Fitness Smartwatch GPS',
-    description: 'Track your daily activity, heart rate, sleep quality, and workouts with real-time GPS and a crystal-clear AMOLED display.',
-    price: 2499,
-    originalPrice: 3999,
-    category: 'Electronics',
-    brand: 'FitTrack',
-    stock: 18,
-    rating: 4.6,
-    numReviews: 94,
-    featured: true,
-    image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Classic Casual Denim Jacket',
-    description: 'Timeless style meets modern comfort. Crafted with 100% durable cotton denim with tailored fit and buttoned cuffs.',
-    price: 1899,
-    originalPrice: 2999,
-    category: 'Fashion',
-    brand: 'UrbanVibe',
-    stock: 14,
-    rating: 4.5,
-    numReviews: 76,
-    featured: true,
-    image: 'https://images.unsplash.com/photo-1576995853123-5a10305d93c0?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Ergonomic Memory Foam Office Chair',
-    description: 'All-day comfort with adjustable lumbar support, 3D armrests, breathable mesh back, and smooth-gliding rollerblade wheels.',
-    price: 6499,
-    originalPrice: 8999,
-    category: 'Home & Kitchen',
-    brand: 'ErgoComfort',
-    stock: 8,
-    rating: 4.9,
-    numReviews: 210,
-    featured: true,
-    image: 'https://images.unsplash.com/photo-1580481077198-4c2826649f83?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Organic Vitamin C Radiant Glow Serum',
-    description: 'Brighten skin and boost collagen with pure cold-pressed vitamin C, hyaluronic acid, and botanical extracts.',
-    price: 799,
-    originalPrice: 1299,
-    category: 'Beauty',
-    brand: 'GlowPure',
-    stock: 40,
-    rating: 4.7,
-    numReviews: 185,
-    featured: false,
-    image: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=600&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Stainless Steel Insulated Water Bottle (1L)',
-    description: 'Double-wall vacuum insulation keeps drinks ice cold for 24 hours or piping hot for 12 hours. Leakproof spout lid.',
-    price: 699,
-    originalPrice: 1199,
-    category: 'Sports',
-    brand: 'HydroSteel',
-    stock: 32,
-    rating: 4.8,
-    numReviews: 112,
-    featured: false,
-    image: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=600&auto=format&fit=crop&q=80',
-  },
-];
-
 // Seed Function
 const seedInitialData = async () => {
   try {
-    const catCount = await Category.countDocuments();
-    if (catCount === 0) {
-      await Category.insertMany(initialCategories);
-      console.log('Seeded initial categories');
-    }
-
-    const prodCount = await Product.countDocuments();
-    if (prodCount === 0) {
-      await Product.insertMany(initialProducts);
-      console.log('Seeded initial products');
-    }
 
     const adminUser = await User.findOne({ email: 'admin@shopsphere.com' });
     if (!adminUser) {
@@ -356,8 +253,8 @@ app.put('/api/users/profile', protect, async (req, res) => {
    PRODUCT ROUTES
    ========================================================================== */
 
-// GET /api/products
-app.get('/api/products', async (req, res) => {
+// GET /api/products (and alias /api/product)
+app.get(['/api/products', '/api/product'], async (req, res) => {
   try {
     const { category, search, minPrice, maxPrice, sort } = req.query;
     let query = {};
@@ -387,8 +284,19 @@ app.get('/api/products', async (req, res) => {
     if (sort === 'rating') sortOption = { rating: -1 };
     if (sort === 'newest') sortOption = { createdAt: -1 };
 
-    const products = await Product.find(query).sort(sortOption);
-    return res.status(200).json({ success: true, count: products.length, products });
+    let products = await Product.find(query).sort(sortOption);
+    if (!products || products.length === 0) {
+      try {
+        const rawProducts = await mongoose.connection.db.collection('product').find(query).sort(sortOption).toArray();
+        if (rawProducts && rawProducts.length > 0) {
+          products = rawProducts;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    return res.status(200).json(products);
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -397,7 +305,25 @@ app.get('/api/products', async (req, res) => {
 // GET /api/products/:id
 app.get('/api/products/:id', async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
+    let product;
+    try {
+      product = await Product.findById(req.params.id);
+    } catch {
+      // ignore
+    }
+
+    if (!product) {
+      try {
+        const { ObjectId } = mongoose.Types;
+        const objId = ObjectId.isValid(req.params.id) ? new ObjectId(req.params.id) : req.params.id;
+        product = await mongoose.connection.db.collection('product').findOne({
+          $or: [{ _id: objId }, { _id: req.params.id }, { id: req.params.id }]
+        });
+      } catch {
+        // ignore
+      }
+    }
+
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
@@ -447,15 +373,50 @@ app.delete('/api/products/:id', protect, adminOnly, async (req, res) => {
 });
 
 /* ==========================================================================
-   REVIEW ROUTES
+   REVIEW ROUTES (PERSISTED IN MONGODB)
    ========================================================================== */
 
 // GET /api/products/:id/reviews
 app.get('/api/products/:id/reviews', async (req, res) => {
   try {
-    const reviews = await Review.find({ product: req.params.id })
+    const { ObjectId } = mongoose.Types;
+    const prodIdObj = ObjectId.isValid(req.params.id) ? new ObjectId(req.params.id) : null;
+
+    let query = {
+      $or: [
+        { product: req.params.id },
+        ...(prodIdObj ? [{ product: prodIdObj }] : []),
+      ],
+    };
+
+    let reviews = await Review.find(query)
       .populate('user', 'name')
       .sort({ createdAt: -1 });
+
+    if (!reviews || reviews.length === 0) {
+      try {
+        const rawReviews = await mongoose.connection.db
+          .collection('reviews')
+          .find(query)
+          .sort({ createdAt: -1 })
+          .toArray();
+        if (rawReviews && rawReviews.length > 0) {
+          reviews = rawReviews;
+        } else {
+          const rawReviewSingular = await mongoose.connection.db
+            .collection('review')
+            .find(query)
+            .sort({ createdAt: -1 })
+            .toArray();
+          if (rawReviewSingular && rawReviewSingular.length > 0) {
+            reviews = rawReviewSingular;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     return res.status(200).json({ success: true, count: reviews.length, reviews });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -465,26 +426,57 @@ app.get('/api/products/:id/reviews', async (req, res) => {
 // POST /api/products/:id/reviews
 app.post('/api/products/:id/reviews', protect, async (req, res) => {
   try {
-    const { rating, comment } = req.body;
-    const product = await Product.findById(req.params.id);
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
+    const { rating, comment, name } = req.body;
+    if (!comment || !rating) {
+      return res.status(400).json({ success: false, message: 'Rating and comment are required' });
     }
+
+    const { ObjectId } = mongoose.Types;
+    const prodIdObj = ObjectId.isValid(req.params.id) ? new ObjectId(req.params.id) : null;
+
+    let product = await Product.findById(req.params.id).catch(() => null);
+    if (!product && prodIdObj) {
+      product = await mongoose.connection.db
+        .collection('product')
+        .findOne({ _id: prodIdObj })
+        .catch(() => null);
+    }
+
+    const reviewerName = req.user?.name || name || 'Verified Customer';
 
     const review = await Review.create({
       user: req.user._id,
-      product: req.params.id,
-      name: req.user.name,
+      product: prodIdObj || req.params.id,
+      name: reviewerName,
       rating: Number(rating),
-      comment,
+      comment: comment.trim(),
     });
 
-    // Update product rating and numReviews
-    const allReviews = await Review.find({ product: req.params.id });
-    product.numReviews = allReviews.length;
-    product.rating =
-      allReviews.reduce((acc, item) => item.rating + acc, 0) / allReviews.length;
-    await product.save();
+    // Update product rating and numReviews in MongoDB
+    const allReviews = await Review.find({
+      $or: [
+        { product: req.params.id },
+        ...(prodIdObj ? [{ product: prodIdObj }] : []),
+      ],
+    });
+
+    const numReviews = allReviews.length;
+    const avgRating = Number(
+      (allReviews.reduce((acc, item) => item.rating + acc, 0) / numReviews).toFixed(1)
+    );
+
+    if (product) {
+      if (product.save) {
+        product.numReviews = numReviews;
+        product.rating = avgRating;
+        await product.save().catch(() => {});
+      } else {
+        await mongoose.connection.db.collection('product').updateOne(
+          { _id: prodIdObj || product._id },
+          { $set: { numReviews: numReviews, rating: avgRating } }
+        ).catch(() => {});
+      }
+    }
 
     return res.status(201).json({ success: true, review });
   } catch (error) {
@@ -755,15 +747,111 @@ app.put('/api/orders/:id/cancel', protect, async (req, res) => {
   }
 });
 
+// Helper: Guess Category Emoji / Icon
+const getCategoryIcon = (name = '') => {
+  const n = (name || '').toLowerCase();
+  if (n.includes('elect') || n.includes('phone') || n.includes('headphone') || n.includes('audio') || n.includes('gadget') || n.includes('tech')) return '📱';
+  if (n.includes('fash') || n.includes('cloth') || n.includes('apparel') || n.includes('wear') || n.includes('shirt')) return '👕';
+  if (n.includes('beauty') || n.includes('cosmetic') || n.includes('skin') || n.includes('care')) return '✨';
+  if (n.includes('home') || n.includes('kitchen') || n.includes('furnitur') || n.includes('decor')) return '🏠';
+  if (n.includes('sport') || n.includes('fit') || n.includes('gym') || n.includes('outdoor')) return '⚽';
+  if (n.includes('book') || n.includes('read') || n.includes('stationery') || n.includes('study')) return '📚';
+  if (n.includes('access') || n.includes('bag') || n.includes('watch') || n.includes('jewelry') || n.includes('glasses')) return '🎒';
+  if (n.includes('game') || n.includes('gaming') || n.includes('console')) return '🎮';
+  if (n.includes('toy') || n.includes('kid') || n.includes('baby')) return '🧸';
+  if (n.includes('food') || n.includes('grocery') || n.includes('snack') || n.includes('drink')) return '🍔';
+  if (n.includes('shoe') || n.includes('footwear') || n.includes('sneaker')) return '👟';
+  if (n.includes('auto') || n.includes('car') || n.includes('bike') || n.includes('motor')) return '🚗';
+  return '🏷️';
+};
+
 /* ==========================================================================
-   CATEGORY ROUTES
+   CATEGORY ROUTES (AUTO-DETECT FROM PRODUCTS & DATABASE)
    ========================================================================== */
 
 // GET /api/categories
 app.get('/api/categories', async (req, res) => {
   try {
-    const categories = await Category.find({}).sort({ name: 1 });
-    return res.status(200).json({ success: true, count: categories.length, categories });
+    let dbCategories = await Category.find({}).sort({ name: 1 });
+    if (!dbCategories || dbCategories.length === 0) {
+      try {
+        const rawCats = await mongoose.connection.db.collection('category').find({}).sort({ name: 1 }).toArray();
+        if (rawCats && rawCats.length > 0) {
+          dbCategories = rawCats;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Get all products to compute product counts and auto-discover categories
+    let allProducts = await Product.find({}).select('category');
+    if (!allProducts || allProducts.length === 0) {
+      try {
+        const rawProds = await mongoose.connection.db.collection('product').find({}).project({ category: 1 }).toArray();
+        if (rawProds && rawProds.length > 0) {
+          allProducts = rawProds;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Count products per category
+    const categoryCounts = {};
+    (allProducts || []).forEach((p) => {
+      if (p.category && typeof p.category === 'string') {
+        const catClean = p.category.trim();
+        const catKey = catClean.toLowerCase();
+        categoryCounts[catKey] = (categoryCounts[catKey] || 0) + 1;
+      }
+    });
+
+    const categoriesMap = new Map();
+
+    // Add registered categories
+    (dbCategories || []).forEach((c) => {
+      const name = c.name?.trim() || '';
+      if (!name) return;
+      const count = categoryCounts[name.toLowerCase()] || 0;
+      categoriesMap.set(name.toLowerCase(), {
+        _id: c._id || c.id,
+        name: name,
+        icon: c.icon || getCategoryIcon(name),
+        description: c.description || `${count} ${count === 1 ? 'Product' : 'Products'}`,
+        count: `${count} ${count === 1 ? 'Product' : 'Products'}`,
+        productCount: count,
+      });
+    });
+
+    // Auto-add any category that exists on products but not in Category collection
+    (allProducts || []).forEach((p) => {
+      if (p.category && typeof p.category === 'string') {
+        const name = p.category.trim();
+        const key = name.toLowerCase();
+        if (!categoriesMap.has(key)) {
+          const count = categoryCounts[key] || 1;
+          const autoCat = {
+            name: name,
+            icon: getCategoryIcon(name),
+            description: `${count} ${count === 1 ? 'Product' : 'Products'}`,
+            count: `${count} ${count === 1 ? 'Product' : 'Products'}`,
+            productCount: count,
+          };
+          categoriesMap.set(key, autoCat);
+
+          // Auto-persist new category into MongoDB in background
+          Category.create({
+            name: name,
+            icon: autoCat.icon,
+            description: `Collection for ${name}`,
+          }).catch(() => {});
+        }
+      }
+    });
+
+    const finalCategories = Array.from(categoriesMap.values());
+    return res.status(200).json({ success: true, count: finalCategories.length, categories: finalCategories });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -772,7 +860,11 @@ app.get('/api/categories', async (req, res) => {
 // POST /api/categories
 app.post('/api/categories', protect, adminOnly, async (req, res) => {
   try {
-    const category = await Category.create(req.body);
+    const payload = {
+      ...req.body,
+      icon: req.body.icon || getCategoryIcon(req.body.name),
+    };
+    const category = await Category.create(payload);
     return res.status(201).json({ success: true, category });
   } catch (error) {
     return res.status(400).json({ success: false, message: error.message });

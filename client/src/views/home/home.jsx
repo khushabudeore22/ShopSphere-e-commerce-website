@@ -6,7 +6,6 @@ import Categories from '../../components/Categories';
 import FeaturedProducts from '../../components/FeaturedProducts';
 import Loading from '../../components/Loading';
 import api from '../../services/api';
-import { mockProducts } from '../../data/mockData';
 
 export default function Home() {
   const [products, setProducts] = useState([]);
@@ -21,22 +20,33 @@ export default function Home() {
           api.get('/categories'),
         ]);
 
-        if (prodRes.status === 'fulfilled' && prodRes.value.data?.products) {
-          setProducts(prodRes.value.data.products);
-        } else if (prodRes.status === 'fulfilled' && Array.isArray(prodRes.value.data)) {
-          setProducts(prodRes.value.data);
+        let fetchedProds = [];
+        if (prodRes.status === 'fulfilled' && Array.isArray(prodRes.value.data)) {
+          fetchedProds = prodRes.value.data;
+          setProducts(fetchedProds);
+        } else if (prodRes.status === 'fulfilled' && prodRes.value.data?.products) {
+          fetchedProds = prodRes.value.data.products;
+          setProducts(fetchedProds);
         } else {
-          setProducts(mockProducts);
+          setProducts([]);
         }
 
-        if (catRes.status === 'fulfilled' && catRes.value.data?.categories) {
+        if (catRes.status === 'fulfilled' && catRes.value.data?.categories?.length > 0) {
           setCategories(catRes.value.data.categories);
-        } else if (catRes.status === 'fulfilled' && Array.isArray(catRes.value.data)) {
+        } else if (catRes.status === 'fulfilled' && Array.isArray(catRes.value.data) && catRes.value.data.length > 0) {
           setCategories(catRes.value.data);
+        } else if (fetchedProds.length > 0) {
+          const uniqueCats = [...new Set(fetchedProds.map((p) => p.category).filter(Boolean))].map((c) => ({
+            name: c,
+            icon: '🛍️',
+            description: 'Explore Collection',
+          }));
+          setCategories(uniqueCats);
         }
       } catch (err) {
-        console.warn('Using fallback home data:', err?.message);
-        setProducts(mockProducts);
+        console.warn('Error fetching home data:', err?.message);
+        setProducts([]);
+        setCategories([]);
       } finally {
         setLoading(false);
       }

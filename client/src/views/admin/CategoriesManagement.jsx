@@ -5,7 +5,6 @@ import Footer from '../../components/Footer';
 import Loading from '../../components/Loading';
 import EmptyState from '../../components/EmptyState';
 import api from '../../services/api';
-import { mockCategories } from '../../data/mockData';
 import Swal from 'sweetalert2';
 import toast from 'react-hot-toast';
 
@@ -25,11 +24,11 @@ export default function CategoriesManagement() {
       if (data && (data.categories || Array.isArray(data))) {
         setCategories(data.categories || data);
       } else {
-        setCategories(mockCategories);
+        setCategories([]);
       }
     } catch (err) {
-      console.warn('API error in categories management, using mock data:', err?.message);
-      setCategories(mockCategories);
+      console.warn('API error in categories management:', err?.message);
+      setCategories([]);
     } finally {
       setLoading(false);
     }

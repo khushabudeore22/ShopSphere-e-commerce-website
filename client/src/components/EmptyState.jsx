@@ -7,6 +7,7 @@ export default function EmptyState({
   icon = '📦',
   actionText,
   actionLink = '/products',
+  onAction,
 }) {
   return (
     <div className="empty-state">
@@ -14,9 +15,15 @@ export default function EmptyState({
       <h3 style={{ fontSize: '1.4rem', color: 'var(--dark)' }}>{title}</h3>
       <p style={{ maxWidth: '400px', margin: '0 auto' }}>{description}</p>
       {actionText && (
-        <Link to={actionLink} className="btn btn-primary" style={{ marginTop: '8px' }}>
-          {actionText}
-        </Link>
+        onAction ? (
+          <button type="button" onClick={onAction} className="btn btn-primary" style={{ marginTop: '8px' }}>
+            {actionText}
+          </button>
+        ) : (
+          <Link to={actionLink} className="btn btn-primary" style={{ marginTop: '8px' }}>
+            {actionText}
+          </Link>
+        )
       )}
     </div>
   );

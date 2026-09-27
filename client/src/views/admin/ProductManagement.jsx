@@ -6,7 +6,6 @@ import Loading from '../../components/Loading';
 import EmptyState from '../../components/EmptyState';
 import { formatPrice } from '../../utils/formatPrice';
 import api from '../../services/api';
-import { mockProducts } from '../../data/mockData';
 import Swal from 'sweetalert2';
 import toast from 'react-hot-toast';
 
@@ -20,11 +19,11 @@ export default function ProductManagement() {
       if (data && (data.products || Array.isArray(data))) {
         setProducts(data.products || data);
       } else {
-        setProducts(mockProducts);
+        setProducts([]);
       }
     } catch (err) {
       console.warn('API error in products management:', err?.message);
-      setProducts(mockProducts);
+      setProducts([]);
     } finally {
       setLoading(false);
     }

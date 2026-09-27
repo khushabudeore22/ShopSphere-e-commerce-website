@@ -4,7 +4,6 @@ import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
 import Loading from '../../components/Loading';
 import api from '../../services/api';
-import { mockProducts } from '../../data/mockData';
 import toast from 'react-hot-toast';
 
 export default function EditProduct() {
@@ -58,28 +57,15 @@ export default function EditProduct() {
         }
       } catch (err) {
         console.warn('API error loading edit product:', err?.message);
+        toast.error('Could not find or load product from database');
+        navigate('/admin/products');
+      } finally {
+        setLoading(false);
       }
-
-      // Fallback
-      const found = mockProducts.find((p) => p.id === id || p._id === id);
-      if (found) {
-        setFormData({
-          name: found.name || '',
-          description: found.description || '',
-          price: found.price || '',
-          originalPrice: found.originalPrice || '',
-          category: found.category || 'Electronics',
-          brand: found.brand || '',
-          stock: found.stock || 10,
-          image: found.image || '',
-          featured: Boolean(found.featured),
-        });
-      }
-      setLoading(false);
     };
 
     fetchProduct();
-  }, [id]);
+  }, [id, navigate]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;

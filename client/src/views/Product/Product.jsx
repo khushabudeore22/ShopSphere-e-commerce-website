@@ -7,7 +7,6 @@ import FilterBar from '../../components/FilterBar';
 import SearchBar from '../../components/SearchBar';
 import Loading from '../../components/Loading';
 import api from '../../services/api';
-import { mockProducts, mockCategories } from '../../data/mockData';
 
 export default function Product() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -15,13 +14,13 @@ export default function Product() {
   const initialSearch = searchParams.get('search') || '';
 
   const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState(mockCategories);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Filter state
   const [searchTerm, setSearchTerm] = useState(initialSearch);
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
-  const [priceRange, setPriceRange] = useState(10000);
+  const [priceRange, setPriceRange] = useState(100000);
   const [minRating, setMinRating] = useState(0);
   const [sortBy, setSortBy] = useState('default');
 
@@ -46,22 +45,33 @@ export default function Product() {
           api.get('/categories'),
         ]);
 
-        if (prodRes.status === 'fulfilled' && prodRes.value.data?.products) {
-          setProducts(prodRes.value.data.products);
-        } else if (prodRes.status === 'fulfilled' && Array.isArray(prodRes.value.data)) {
-          setProducts(prodRes.value.data);
+        let fetchedProducts = [];
+        if (prodRes.status === 'fulfilled' && Array.isArray(prodRes.value.data)) {
+          fetchedProducts = prodRes.value.data;
+          setProducts(fetchedProducts);
+        } else if (prodRes.status === 'fulfilled' && prodRes.value.data?.products) {
+          fetchedProducts = prodRes.value.data.products;
+          setProducts(fetchedProducts);
         } else {
-          setProducts(mockProducts);
+          setProducts([]);
         }
 
-        if (catRes.status === 'fulfilled' && catRes.value.data?.categories) {
+        if (catRes.status === 'fulfilled' && catRes.value.data?.categories?.length > 0) {
           setCategories(catRes.value.data.categories);
-        } else if (catRes.status === 'fulfilled' && Array.isArray(catRes.value.data)) {
+        } else if (catRes.status === 'fulfilled' && Array.isArray(catRes.value.data) && catRes.value.data.length > 0) {
           setCategories(catRes.value.data);
+        } else if (fetchedProducts.length > 0) {
+          // Extract unique categories from fetched products
+          const uniqueCats = [...new Set(fetchedProducts.map((p) => p.category).filter(Boolean))].map((c) => ({
+            name: c,
+          }));
+          if (uniqueCats.length > 0) {
+            setCategories(uniqueCats);
+          }
         }
       } catch (err) {
-        console.warn('API error, falling back to mock data:', err?.message);
-        setProducts(mockProducts);
+        console.warn('API error fetching products:', err?.message);
+        setProducts([]);
       } finally {
         setLoading(false);
       }
@@ -93,7 +103,7 @@ export default function Product() {
   const handleResetFilters = () => {
     setSearchTerm('');
     setSelectedCategory('All');
-    setPriceRange(10000);
+    setPriceRange(100000);
     setMinRating(0);
     setSortBy('default');
     setSearchParams({});
@@ -116,7 +126,7 @@ export default function Product() {
 
       // Category filter
       if (selectedCategory !== 'All') {
-        const prodCat = product.category?.toLowerCase() || '';
+        const prodCat = (product.category || '').toLowerCase();
         const targetCat = selectedCategory.toLowerCase();
         if (!prodCat.includes(targetCat) && !targetCat.includes(prodCat)) {
           return false;
@@ -124,12 +134,14 @@ export default function Product() {
       }
 
       // Price filter
-      if (product.price && product.price > priceRange) {
+      const numPrice = Number(product.price);
+      if (!isNaN(numPrice) && numPrice > priceRange) {
         return false;
       }
 
       // Rating filter
-      if (minRating > 0 && (product.rating || 0) < minRating) {
+      const numRating = Number(product.rating || 0);
+      if (minRating > 0 && numRating < minRating) {
         return false;
       }
 
@@ -137,13 +149,13 @@ export default function Product() {
     })
     .sort((a, b) => {
       if (sortBy === 'price-low') {
-        return (a.price || 0) - (b.price || 0);
+        return (Number(a.price) || 0) - (Number(b.price) || 0);
       }
       if (sortBy === 'price-high') {
-        return (b.price || 0) - (a.price || 0);
+        return (Number(b.price) || 0) - (Number(a.price) || 0);
       }
       if (sortBy === 'rating') {
-        return (b.rating || 0) - (a.rating || 0);
+        return (Number(b.rating) || 0) - (Number(a.rating) || 0);
       }
       if (sortBy === 'newest') {
         return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
@@ -189,7 +201,7 @@ export default function Product() {
         {loading ? (
           <Loading message="Loading catalog..." />
         ) : (
-          <ProductList products={filteredProducts} />
+          <ProductList products={filteredProducts} onReset={handleResetFilters} />
         )}
       </main>
 

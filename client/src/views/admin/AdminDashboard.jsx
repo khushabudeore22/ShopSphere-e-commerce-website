@@ -5,7 +5,6 @@ import Footer from '../../components/Footer';
 import Loading from '../../components/Loading';
 import { formatPrice } from '../../utils/formatPrice';
 import api from '../../services/api';
-import { mockProducts } from '../../data/mockData';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -25,21 +24,21 @@ export default function AdminDashboard() {
           api.get('/admin/users'),
         ]);
 
-        let prodsCount = mockProducts.length;
+        let prodsCount = 0;
         if (prodRes.status === 'fulfilled') {
           const list = prodRes.value.data?.products || prodRes.value.data || [];
           prodsCount = list.length;
         }
 
-        let ordersCount = 12;
-        let totalSalesVal = 58490;
+        let ordersCount = 0;
+        let totalSalesVal = 0;
         if (ordRes.status === 'fulfilled') {
           const orders = ordRes.value.data?.orders || ordRes.value.data || [];
           ordersCount = orders.length;
           totalSalesVal = orders.reduce((sum, o) => sum + (o.totalPrice || 0), 0);
         }
 
-        let usersCount = 28;
+        let usersCount = 0;
         if (userRes.status === 'fulfilled') {
           const users = userRes.value.data?.users || userRes.value.data || [];
           usersCount = users.length;
@@ -52,12 +51,12 @@ export default function AdminDashboard() {
           totalSales: totalSalesVal,
         });
       } catch (err) {
-        console.warn('Dashboard stats fallback:', err?.message);
+        console.warn('Dashboard stats error:', err?.message);
         setStats({
-          totalProducts: mockProducts.length,
-          totalOrders: 14,
-          totalUsers: 35,
-          totalSales: 64990,
+          totalProducts: 0,
+          totalOrders: 0,
+          totalUsers: 0,
+          totalSales: 0,
         });
       } finally {
         setLoading(false);

@@ -35,14 +35,14 @@ export default function FilterBar({
 
       {/* Maximum Price Range */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-          Max Price: ₹{priceRange.toLocaleString('en-IN')}
+        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+          Max Price: {priceRange >= 100000 ? 'All' : `₹${priceRange.toLocaleString('en-IN')}`}
         </span>
         <input
           type="range"
-          min="200"
-          max="15000"
-          step="200"
+          min="100"
+          max="100000"
+          step="500"
           value={priceRange}
           onChange={(e) => onPriceRangeChange(Number(e.target.value))}
           style={{ cursor: 'pointer', accentColor: 'var(--primary)' }}

@@ -33,33 +33,7 @@ export default function OrderManagement() {
       }
     } catch (err) {
       console.warn('API error in admin orders:', err?.message);
-      const localOrders = JSON.parse(localStorage.getItem('shopsphere_orders') || '[]');
-      if (localOrders.length > 0) {
-        setOrders(localOrders);
-      } else {
-        setOrders([
-          {
-            _id: 'ord_demo_101',
-            createdAt: new Date().toISOString(),
-            shippingAddress: { name: 'Rohan Sharma', city: 'Pune' },
-            currentLocation: 'ShopSphere Central Hub, Nashik',
-            totalPrice: 4298,
-            paymentMethod: 'Cash on Delivery',
-            paymentStatus: 'Pending',
-            orderStatus: 'Confirmed',
-          },
-          {
-            _id: 'ord_demo_102',
-            createdAt: new Date(Date.now() - 86400000).toISOString(),
-            shippingAddress: { name: 'Priya Patel', city: 'Mumbai' },
-            currentLocation: 'Bhiwandi Sorting Facility',
-            totalPrice: 1899,
-            paymentMethod: 'Cash on Delivery',
-            paymentStatus: 'Paid',
-            orderStatus: 'Shipped',
-          },
-        ]);
-      }
+      setOrders([]);
     } finally {
       setLoading(false);
     }

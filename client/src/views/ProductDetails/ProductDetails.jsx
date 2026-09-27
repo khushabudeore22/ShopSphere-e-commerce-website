@@ -10,7 +10,6 @@ import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { formatPrice } from '../../utils/formatPrice';
 import api from '../../services/api';
-import { mockProducts, mockReviews } from '../../data/mockData';
 import toast from 'react-hot-toast';
 
 export default function ProductDetails() {
@@ -40,8 +39,7 @@ export default function ProductDetails() {
         if (prodRes.status === 'fulfilled' && (prodRes.value.data?.product || prodRes.value.data)) {
           setProduct(prodRes.value.data.product || prodRes.value.data);
         } else {
-          const found = mockProducts.find((p) => p.id === id || p._id === id) || mockProducts[0];
-          setProduct(found);
+          setProduct(null);
         }
 
         if (revRes.status === 'fulfilled' && Array.isArray(revRes.value.data)) {
@@ -49,13 +47,12 @@ export default function ProductDetails() {
         } else if (revRes.status === 'fulfilled' && revRes.value.data?.reviews) {
           setReviews(revRes.value.data.reviews);
         } else {
-          setReviews(mockReviews);
+          setReviews([]);
         }
       } catch (err) {
-        console.warn('API error in product details, using mock data:', err?.message);
-        const found = mockProducts.find((p) => p.id === id || p._id === id) || mockProducts[0];
-        setProduct(found);
-        setReviews(mockReviews);
+        console.warn('API error in product details:', err?.message);
+        setProduct(null);
+        setReviews([]);
       } finally {
         setLoading(false);
       }
@@ -71,6 +68,10 @@ export default function ProductDetails() {
 
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
+    if (!user) {
+      toast.error('Please log in to submit a review');
+      return;
+    }
     if (!reviewComment.trim()) {
       toast.error('Please write a review comment');
       return;
@@ -80,34 +81,24 @@ export default function ProductDetails() {
     try {
       const { data } = await api.post(`/products/${id}/reviews`, {
         rating: reviewRating,
-        comment: reviewComment,
+        comment: reviewComment.trim(),
       });
 
-      const newReview = data.review || {
-        _id: 'rev_' + Date.now(),
-        user: { name: user?.name || 'You' },
-        userName: user?.name || 'You',
-        rating: reviewRating,
-        comment: reviewComment,
-        createdAt: new Date().toISOString(),
-      };
-
-      setReviews([newReview, ...reviews]);
+      if (data.review) {
+        setReviews([data.review, ...reviews]);
+        if (product) {
+          // Update displayed product rating
+          const updatedNum = (product.numReviews || 0) + 1;
+          const updatedRating = Number(
+            (((product.rating || 5) * (product.numReviews || 0) + reviewRating) / updatedNum).toFixed(1)
+          );
+          setProduct({ ...product, numReviews: updatedNum, rating: updatedRating });
+        }
+      }
       setReviewComment('');
-      toast.success('Review posted successfully!');
+      toast.success('Review submitted and saved to database!');
     } catch (err) {
-      // Offline fallback
-      const fallbackReview = {
-        _id: 'rev_' + Date.now(),
-        user: { name: user?.name || 'Verified Buyer' },
-        userName: user?.name || 'Verified Buyer',
-        rating: reviewRating,
-        comment: reviewComment,
-        createdAt: new Date().toISOString(),
-      };
-      setReviews([fallbackReview, ...reviews]);
-      setReviewComment('');
-      toast.success('Review posted! (Saved locally)');
+      toast.error(err.response?.data?.message || 'Failed to submit review');
     } finally {
       setSubmittingReview(false);
     }

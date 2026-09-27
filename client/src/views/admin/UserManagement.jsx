@@ -20,36 +20,8 @@ export default function UserManagement() {
         setUsers([]);
       }
     } catch (err) {
-      console.warn('API error in admin users, using fallback:', err?.message);
-      setUsers([
-        {
-          _id: 'usr_admin_1',
-          name: 'ShopSphere Admin',
-          email: 'admin@shopsphere.com',
-          role: 'admin',
-          isActive: true,
-          phone: '+91 9876543210',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          _id: 'usr_cust_2',
-          name: 'Rahul Sharma',
-          email: 'rahul@example.com',
-          role: 'user',
-          isActive: true,
-          phone: '+91 9876543211',
-          createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-        },
-        {
-          _id: 'usr_cust_3',
-          name: 'Ananya Verma',
-          email: 'ananya@example.com',
-          role: 'user',
-          isActive: false,
-          phone: '+91 9876543212',
-          createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-        },
-      ]);
+      console.warn('API error in admin users:', err?.message);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
