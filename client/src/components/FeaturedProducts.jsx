@@ -1,12 +1,14 @@
 import React from 'react';
 import ProductCard from './ProductCard';
-import { mockProducts } from '../data/mockData';
 
 export default function FeaturedProducts({
-  title = "Featured Products",
-  subtitle = "Our handpicked selections for top quality and value",
-  products = mockProducts.filter(p => p.featured)
+  title = 'Featured Products',
+  subtitle = 'Our handpicked selections for top quality and unmatched value',
+  products = [],
+  onAddToCart,
 }) {
+  if (!products || products.length === 0) return null;
+
   return (
     <section className="section">
       <div className="section-header">
@@ -17,7 +19,11 @@ export default function FeaturedProducts({
       </div>
       <div className="products-grid">
         {products.map((product) => (
-          <ProductCard key={product.id} product={product} />
+          <ProductCard
+            key={product._id || product.id}
+            product={product}
+            onAddToCart={onAddToCart}
+          />
         ))}
       </div>
     </section>

@@ -1,57 +1,69 @@
 import React from 'react';
-import { Link } from 'react-router';
+import { Link } from 'react-router-dom';
 
 export default function Footer() {
   return (
     <footer className="footer">
       <div className="footer-container">
+        {/* BRAND */}
         <div>
           <div className="footer-brand">
-            <span>Shop</span>Sphere
+            Shop<span>Sphere</span>
           </div>
-          <p style={{ color: '#94A3B8', fontSize: '0.9rem', marginBottom: '16px' }}>
-            Your one-stop destination for quality lifestyle, fashion, electronics, and home essentials at unbeatable prices.
+          <p style={{ color: '#94A3B8', fontSize: '0.9rem', marginBottom: '12px' }}>
+            Everything You Need, All in One Place.
           </p>
-          <div style={{ display: 'flex', gap: '12px', fontSize: '1.2rem' }}>
-            <span>🌐</span> <span>📸</span> <span>🐦</span> <span>💼</span>
-          </div>
+          <p style={{ color: '#64748B', fontSize: '0.85rem' }}>
+            Premium e-commerce platform built on the MERN stack with modern responsive design and seamless user experience.
+          </p>
         </div>
 
+        {/* QUICK LINKS */}
         <div>
           <h4 style={{ color: '#FFFFFF', marginBottom: '16px' }}>Quick Links</h4>
           <ul className="footer-links">
-            <li><Link to="/">Home</Link></li>
             <li><Link to="/products">All Products</Link></li>
+            <li><Link to="/orders">My Orders</Link></li>
+            <li><Link to="/wishlist">My Wishlist</Link></li>
+            <li><Link to="/cart">Shopping Cart</Link></li>
+          </ul>
+        </div>
+
+        {/* COMPANY */}
+        <div>
+          <h4 style={{ color: '#FFFFFF', marginBottom: '16px' }}>Company</h4>
+          <ul className="footer-links">
             <li><Link to="/about">About Us</Link></li>
             <li><Link to="/contact">Contact Support</Link></li>
+            <li><Link to="/products?category=Electronics">Electronics</Link></li>
+            <li><Link to="/products?category=Fashion">Fashion</Link></li>
           </ul>
         </div>
 
+        {/* SUPPORT */}
         <div>
-          <h4 style={{ color: '#FFFFFF', marginBottom: '16px' }}>Customer Service</h4>
-          <ul className="footer-links">
-            <li><Link to="/orders">Order Tracking</Link></li>
-            <li><Link to="/cart">Shopping Cart</Link></li>
-            <li><Link to="/wishlist">Wishlist</Link></li>
-            <li><Link to="/profile">My Account</Link></li>
-          </ul>
-        </div>
-
-        <div>
-          <h4 style={{ color: '#FFFFFF', marginBottom: '16px' }}>Stay Connected</h4>
-          <p style={{ color: '#94A3B8', fontSize: '0.85rem', marginBottom: '12px' }}>
-            Subscribe to our newsletter for exclusive discounts and new product updates.
+          <h4 style={{ color: '#FFFFFF', marginBottom: '16px' }}>Customer Support</h4>
+          <p style={{ color: '#94A3B8', fontSize: '0.9rem', marginBottom: '8px' }}>
+            📧 support@shopsphere.com
           </p>
-          <div style={{ color: '#CBD5E1', fontSize: '0.9rem' }}>
-            <p>📧 support@shopsphere.com</p>
-            <p>📞 +91 98765 43210</p>
-          </div>
+          <p style={{ color: '#94A3B8', fontSize: '0.9rem', marginBottom: '8px' }}>
+            📞 +91 98765 43210
+          </p>
+          <p style={{ color: '#94A3B8', fontSize: '0.9rem' }}>
+            📍 Nashik, Maharashtra, India
+          </p>
         </div>
       </div>
 
       <div className="footer-bottom">
-        <p>© {new Date().getFullYear()} ShopSphere Inc. All rights reserved.</p>
-        <p>Built with MERN Stack</p>
+        <div>
+          © {new Date().getFullYear()} ShopSphere. All rights reserved.
+        </div>
+        <div style={{ display: 'flex', gap: '16px' }}>
+          <Link to="/about" style={{ color: '#94A3B8' }}>Privacy</Link>
+          <Link to="/about" style={{ color: '#94A3B8' }}>Terms</Link>
+          <Link to="/contact" style={{ color: '#94A3B8' }}>Help</Link>
+        </div>
       </div>
     </footer>
   );

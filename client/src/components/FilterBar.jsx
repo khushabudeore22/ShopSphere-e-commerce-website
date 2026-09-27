@@ -2,19 +2,19 @@ import React from 'react';
 
 export default function FilterBar({
   categories = [],
-  selectedCategory,
+  selectedCategory = 'All',
   onCategoryChange,
-  priceRange,
+  priceRange = 10000,
   onPriceRangeChange,
-  minRating,
+  minRating = 0,
   onMinRatingChange,
-  sortBy,
+  sortBy = 'default',
   onSortByChange,
-  onReset
+  onReset,
 }) {
   return (
     <div className="filter-bar">
-      {/* Category dropdown */}
+      {/* Category filter */}
       <div style={{ minWidth: '180px' }}>
         <select
           className="form-select"
@@ -22,31 +22,34 @@ export default function FilterBar({
           onChange={(e) => onCategoryChange(e.target.value)}
         >
           <option value="All">All Categories</option>
-          {categories.map((cat) => (
-            <option key={cat.id || cat} value={cat.name || cat}>
-              {cat.name || cat}
-            </option>
-          ))}
+          {categories.map((cat, idx) => {
+            const catName = typeof cat === 'string' ? cat : cat.name;
+            return (
+              <option key={idx} value={catName}>
+                {catName}
+              </option>
+            );
+          })}
         </select>
       </div>
 
-      {/* Max Price filter */}
+      {/* Maximum Price Range */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-          Max Price: ₹{priceRange}
+          Max Price: ₹{priceRange.toLocaleString('en-IN')}
         </span>
         <input
           type="range"
-          min="500"
-          max="10000"
-          step="500"
+          min="200"
+          max="15000"
+          step="200"
           value={priceRange}
           onChange={(e) => onPriceRangeChange(Number(e.target.value))}
-          style={{ cursor: 'pointer' }}
+          style={{ cursor: 'pointer', accentColor: 'var(--primary)' }}
         />
       </div>
 
-      {/* Rating filter */}
+      {/* Minimum Rating */}
       <div style={{ minWidth: '150px' }}>
         <select
           className="form-select"
@@ -60,22 +63,23 @@ export default function FilterBar({
         </select>
       </div>
 
-      {/* Sort By dropdown */}
+      {/* Sorting options */}
       <div style={{ minWidth: '180px', marginLeft: 'auto' }}>
         <select
           className="form-select"
           value={sortBy}
           onChange={(e) => onSortByChange(e.target.value)}
         >
-          <option value="default">Sort: Default</option>
+          <option value="default">Sort by: Default</option>
           <option value="price-low">Price: Low to High</option>
           <option value="price-high">Price: High to Low</option>
-          <option value="rating">Highest Rated</option>
+          <option value="rating">Top Rated</option>
+          <option value="newest">Newest</option>
         </select>
       </div>
 
       {/* Reset button */}
-      <button className="btn btn-outline btn-sm" onClick={onReset}>
+      <button className="btn btn-outline btn-sm" onClick={onReset} type="button">
         Reset Filters
       </button>
     </div>

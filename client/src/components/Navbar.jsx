@@ -1,84 +1,89 @@
 import React, { useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
+import SearchBar from './SearchBar';
 
 export default function Navbar() {
-  const [searchQuery, setSearchQuery] = useState('');
+  const { user, logout } = useAuth();
+  const { count } = useCart();
   const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
-    }
+  const handleLogout = () => {
+    logout();
+    navigate('/');
   };
 
   return (
     <header className="navbar">
       <div className="navbar-container">
-        {/* Brand Logo */}
+        {/* LOGO */}
         <Link to="/" className="navbar-brand">
-          <span>Shop</span>Sphere
+          Shop<span>Sphere</span>
         </Link>
 
-        {/* Global Search Bar */}
-        <form onSubmit={handleSearch} className="navbar-search">
-          <div className="search-input-wrap">
-            <input
-              type="text"
-              placeholder="Search products, brands, categories..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <span className="search-icon">🔍</span>
-          </div>
-        </form>
-
-        {/* Navigation Links */}
-        <nav>
-          <ul className="navbar-nav">
-            <li>
-              <NavLink to="/" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
-                Home
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/products" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
-                Products
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/about" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
-                About
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/contact" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
-                Contact
-              </NavLink>
-            </li>
-          </ul>
-        </nav>
-
-        {/* User Actions */}
-        <div className="navbar-actions">
-          <Link to="/wishlist" className="nav-icon-btn" title="Wishlist">
-            ❤️
-            <span className="nav-badge">2</span>
-          </Link>
-
-          <Link to="/cart" className="nav-icon-btn" title="Cart">
-            🛒
-            <span className="nav-badge">3</span>
-          </Link>
-
-          <Link to="/profile" className="nav-icon-btn" title="Profile">
-            👤
-          </Link>
-
-          <Link to="/admin" className="btn btn-outline btn-sm">
-            Admin
-          </Link>
+        {/* SEARCH BAR (Compact in header) */}
+        <div className="navbar-search">
+          <SearchBar compact placeholder="Search products..." />
         </div>
+
+        {/* NAVIGATION LINKS */}
+        <nav className={`navbar-nav ${mobileMenuOpen ? 'open' : ''}`}>
+          <Link to="/" className="navbar-link" onClick={() => setMobileMenuOpen(false)}>
+            Home
+          </Link>
+          <Link to="/products" className="navbar-link" onClick={() => setMobileMenuOpen(false)}>
+            Products
+          </Link>
+          <Link to="/about" className="navbar-link" onClick={() => setMobileMenuOpen(false)}>
+            About
+          </Link>
+          <Link to="/contact" className="navbar-link" onClick={() => setMobileMenuOpen(false)}>
+            Contact
+          </Link>
+
+          <Link to="/wishlist" className="navbar-link" onClick={() => setMobileMenuOpen(false)}>
+            🤍 Wishlist
+          </Link>
+
+          <Link to="/cart" className="navbar-link cart-link" onClick={() => setMobileMenuOpen(false)}>
+            🛒 Cart <b className="cart-badge">{count}</b>
+          </Link>
+
+          {user ? (
+            <div className="user-menu" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Link
+                to={user.role === 'admin' ? '/admin' : '/profile'}
+                className="btn btn-outline btn-sm"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                👤 {user.name ? user.name.split(' ')[0] : 'Account'}
+                {user.role === 'admin' && ' (Admin)'}
+              </Link>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                style={{ color: 'var(--danger)', borderColor: 'var(--border-color)' }}
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  handleLogout();
+                }}
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <Link to="/login" className="btn btn-primary btn-sm" onClick={() => setMobileMenuOpen(false)}>
+                Login
+              </Link>
+              <Link to="/register" className="btn btn-outline btn-sm" onClick={() => setMobileMenuOpen(false)}>
+                Register
+              </Link>
+            </div>
+          )}
+        </nav>
       </div>
     </header>
   );

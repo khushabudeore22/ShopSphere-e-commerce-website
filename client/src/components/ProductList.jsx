@@ -7,8 +7,10 @@ export default function ProductList({ products = [], onAddToCart }) {
     return (
       <EmptyState
         title="No Products Found"
-        description="Try adjusting your search or filter keywords to find what you are looking for."
+        description="Try adjusting your search query, price filters, or category selection."
         icon="🔍"
+        actionText="Browse All Products"
+        actionLink="/products"
       />
     );
   }
@@ -16,7 +18,11 @@ export default function ProductList({ products = [], onAddToCart }) {
   return (
     <div className="products-grid">
       {products.map((product) => (
-        <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} />
+        <ProductCard
+          key={product._id || product.id}
+          product={product}
+          onAddToCart={onAddToCart}
+        />
       ))}
     </div>
   );
