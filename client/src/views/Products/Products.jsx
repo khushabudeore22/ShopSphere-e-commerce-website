@@ -27,13 +27,10 @@ export default function Product() {
   // Sync searchParams when URL changes
   useEffect(() => {
     const urlCategory = searchParams.get('category');
-    if (urlCategory) {
-      setSelectedCategory(urlCategory);
-    }
+    setSelectedCategory(urlCategory || 'All');
+
     const urlSearch = searchParams.get('search');
-    if (urlSearch !== null) {
-      setSearchTerm(urlSearch);
-    }
+    setSearchTerm(urlSearch || '');
   }, [searchParams]);
 
   useEffect(() => {
@@ -84,22 +81,24 @@ export default function Product() {
 
   const handleCategoryChange = (cat) => {
     setSelectedCategory(cat);
-    if (cat === 'All') {
-      searchParams.delete('category');
+    const newParams = new URLSearchParams(searchParams);
+    if (cat && cat !== 'All') {
+      newParams.set('category', cat);
     } else {
-      searchParams.set('category', cat);
+      newParams.delete('category');
     }
-    setSearchParams(searchParams);
+    setSearchParams(newParams);
   };
 
   const handleSearchChange = (term) => {
     setSearchTerm(term);
-    if (term) {
-      searchParams.set('search', term);
+    const newParams = new URLSearchParams(searchParams);
+    if (term && term.trim()) {
+      newParams.set('search', term);
     } else {
-      searchParams.delete('search');
+      newParams.delete('search');
     }
-    setSearchParams(searchParams);
+    setSearchParams(newParams);
   };
 
   const handleResetFilters = () => {
