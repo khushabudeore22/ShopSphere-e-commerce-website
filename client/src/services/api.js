@@ -27,12 +27,17 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor for error handling
+// Response interceptor
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    console.error(
+      'API Error:',
+      error.response?.status,
+      error.response?.data || error.message
+    );
+
     if (error.response && error.response.status === 401) {
-      // Optional auto cleanup if token is invalid
       // localStorage.removeItem('shopsphere_token');
       // localStorage.removeItem('shopsphere_user');
     }
