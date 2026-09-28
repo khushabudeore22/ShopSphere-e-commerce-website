@@ -1,8 +1,20 @@
 import axios from 'axios';
 
-const API_BASE_URL =
+let rawBaseUrl =
   import.meta.env.VITE_API_URL ||
   'https://shopsphere-e-commerce-website-api.onrender.com/api';
+
+// Normalize base URL: trim whitespace and remove trailing slashes
+rawBaseUrl = rawBaseUrl.trim().replace(/\/+$/, '');
+
+// Ensure /api suffix exists
+if (!rawBaseUrl.endsWith('/api')) {
+  rawBaseUrl = `${rawBaseUrl}/api`;
+}
+
+const API_BASE_URL = rawBaseUrl;
+
+console.log('API BASE URL:', API_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,

@@ -4,14 +4,23 @@ import api from "../services/api";
 import ProductCard from "./ProductCard";
 import Loading from "./Loading";
 
-export default function FeaturedProducts() {
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function FeaturedProducts({
+  title = "Featured Collection",
+  subtitle = "Handpicked top quality items at unbeatable value",
+  products: propProducts,
+} = {}) {
+  const [products, setProducts] = useState(propProducts || []);
+  const [loading, setLoading] = useState(propProducts === undefined);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (propProducts !== undefined) {
+      setProducts(propProducts);
+      setLoading(false);
+      return;
+    }
     fetchFeaturedProducts();
-  }, []);
+  }, [propProducts]);
 
   const fetchFeaturedProducts = async () => {
     try {
@@ -22,10 +31,10 @@ export default function FeaturedProducts() {
 
       console.log("Featured products response:", response.data);
 
-      // Backend returns an ARRAY directly
+      // Backend returns an ARRAY directly or { products: [...] }
       const allProducts = Array.isArray(response.data)
         ? response.data
-        : response.data.products || [];
+        : response.data?.products || [];
 
       // Show products marked featured
       const featuredProducts = allProducts.filter(
@@ -58,9 +67,9 @@ export default function FeaturedProducts() {
     return (
       <section className="featured-section">
         <div className="section-header">
-          <h2>Featured Collection</h2>
+          <h2>{title}</h2>
           <p>
-            Handpicked top quality items at unbeatable value
+            {subtitle}
           </p>
         </div>
 
@@ -74,9 +83,9 @@ export default function FeaturedProducts() {
 
       <div className="section-header">
         <div>
-          <h2>Featured Collection</h2>
+          <h2>{title}</h2>
           <p>
-            Handpicked top quality items at unbeatable value
+            {subtitle}
           </p>
         </div>
 

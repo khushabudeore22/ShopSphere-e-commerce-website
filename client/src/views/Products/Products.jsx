@@ -45,6 +45,8 @@ export default function Product() {
           api.get('/categories'),
         ]);
 
+        console.log("PRODUCT API RESPONSE:", prodRes.status === 'fulfilled' ? prodRes.value.data : prodRes.reason);
+
         let fetchedProducts = [];
         if (prodRes.status === 'fulfilled' && Array.isArray(prodRes.value.data)) {
           fetchedProducts = prodRes.value.data;

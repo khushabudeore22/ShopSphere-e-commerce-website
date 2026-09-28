@@ -20,6 +20,8 @@ export default function Home() {
           api.get('/categories'),
         ]);
 
+        console.log("HOME PRODUCT API RESPONSE:", prodRes.status === 'fulfilled' ? prodRes.value.data : prodRes.reason);
+
         let fetchedProds = [];
         if (prodRes.status === 'fulfilled' && Array.isArray(prodRes.value.data)) {
           fetchedProds = prodRes.value.data;
